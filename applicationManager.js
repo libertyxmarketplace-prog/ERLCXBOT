@@ -851,168 +851,336 @@ export function buildModule4Modal(session) {
 /* ========================================================================== */
 
 /**
- * Builds the staff review card with arrow pagination (strictly using the two arrow emojis).
+ * Builds the staff review card using modern Discord Components V2 Container (flags: 32768)
+ * featuring the official applications banner, candidate status pill, formatted responses,
+ * arrow pagination, and decision controls.
  */
 export function buildStaffReviewCard(submission, page = 0) {
   const roleName = getRoleDisplayName(submission.role);
   const totalPages = 4;
   const safePage = Math.max(0, Math.min(totalPages - 1, page));
 
-  const statusColors = {
-    pending: ACCENT_COLOR,
-    approved: 0x22c55e,
-    denied: 0xef4444
-  };
+  const bannerPath = path.join(__dirname, 'assets', 'applications_banner.png');
+  const files = [];
 
-  const statusLabels = {
-    pending: 'PENDING REVIEW',
-    approved: `APPROVED by <@${submission.reviewedBy}>`,
-    denied: `DENIED by <@${submission.reviewedBy}>`
-  };
+  let topBannerMediaUrl = 'attachment://applications_banner.png';
+  if (fs.existsSync(bannerPath)) {
+    files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
+  }
 
-  const pageTitles = [
-    'Page 1: Rules & Requirements',
-    'Page 2: General Information',
-    'Page 3: Core Knowledge',
-    'Page 4: Realistic Scenarios'
-  ];
+  const isPending = submission.status === 'pending';
+  const isApproved = submission.status === 'approved';
+  const isDenied = submission.status === 'denied';
 
-  const embed = new EmbedBuilder()
-    .setColor(statusColors[submission.status] || ACCENT_COLOR)
-    .setAuthor({
-      name: `Staff Application Review • ${roleName}`,
-      iconURL: submission.userAvatar || undefined
-    })
-    .setTitle(`Application #${submission.id.slice(0, 8).toUpperCase()} — ${submission.userTag}`)
-    .setDescription(
-      `**Applicant:** <@${submission.userId}> (${submission.userTag})\n` +
-      `**User ID:** \`${submission.userId}\`\n` +
-      `**Role Applied:** **${roleName}**\n` +
-      `**Submitted:** <t:${Math.floor(submission.submittedAt / 1000)}:f> (<t:${Math.floor(submission.submittedAt / 1000)}:R>)\n` +
-      `**Status:** ${statusLabels[submission.status] || submission.status.toUpperCase()}\n` +
-      (submission.notes ? `**Staff Notes:** ${submission.notes}\n` : '') +
-      `\n### ${pageTitles[safePage]}`
-    )
-    .setFooter({
-      text: `Orlando Staff Applications • Page ${safePage + 1} of ${totalPages} • ID: ${submission.id.slice(0, 8)}`
-    })
-    .setTimestamp();
+  let statusPillStyle = 1; // 1 = Primary Blurple
+  let statusPillLabel = 'Pending Review';
+  if (isApproved) {
+    statusPillStyle = 3; // Success Green
+    statusPillLabel = 'Approved';
+  } else if (isDenied) {
+    statusPillStyle = 4; // Danger Red
+    statusPillLabel = 'Denied';
+  }
 
   const ans = submission.answers || {};
+  let pageContentText = '';
 
-  // Build fields for current page
   if (safePage === 0) {
     if (submission.role === 'ingame_mod') {
-      embed.addFields(
-        { name: 'Read In-Game & Discord Regulations?', value: ans.rule_regulations || 'N/A', inline: true },
-        { name: 'Age', value: ans.current_age || 'N/A', inline: true },
-        { name: 'Working Microphone?', value: ans.functional_mic || 'N/A', inline: true },
-        { name: 'Recording Software?', value: ans.recording_software || 'N/A', inline: true },
-        { name: 'Emergency Availability?', value: ans.urgent_availability || 'N/A', inline: true }
-      );
+      pageContentText = [
+        `### Page 1 of 4 • Rules & Prerequisites`,
+        `> **1. Read In-Game & Discord Regulations?**`,
+        `• ${ans.rule_regulations || 'N/A'}`,
+        '',
+        `> **2. Current Age (14+ Requirement)**`,
+        `• \`${ans.current_age || 'N/A'}\``,
+        '',
+        `> **3. Working Microphone for Voice Duties?**`,
+        `• ${ans.functional_mic || 'N/A'}`,
+        '',
+        `> **4. Recording Software (OBS/Medal/GeForce)?**`,
+        `• ${ans.recording_software || 'N/A'}`,
+        '',
+        `> **5. Emergency Availability Outside Shift Hours?**`,
+        `• ${ans.urgent_availability || 'N/A'}`
+      ].join('\n');
     } else {
-      embed.addFields(
-        { name: 'Read Guidelines & Terms?', value: ans.rule_regulations || 'N/A', inline: true },
-        { name: 'Age', value: ans.current_age || 'N/A', inline: true },
-        { name: 'Working Microphone?', value: ans.functional_mic || 'N/A', inline: true },
-        { name: 'Timezone', value: ans.timezone || 'N/A', inline: true },
-        { name: 'Weekly Schedule & Availability', value: ans.weekly_schedule || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 1 of 4 • Rules & Prerequisites`,
+        `> **1. Read Guidelines & Terms of Service?**`,
+        `• ${ans.rule_regulations || 'N/A'}`,
+        '',
+        `> **2. Current Age (14+ Requirement)**`,
+        `• \`${ans.current_age || 'N/A'}\``,
+        '',
+        `> **3. Working Microphone for Staff Meetings?**`,
+        `• ${ans.functional_mic || 'N/A'}`,
+        '',
+        `> **4. Timezone**`,
+        `• \`${ans.timezone || 'N/A'}\``,
+        '',
+        `> **5. Weekly Schedule & Available Hours**`,
+        ans.weekly_schedule ? ans.weekly_schedule.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     }
   } else if (safePage === 1) {
     if (submission.role === 'ingame_mod') {
-      embed.addFields(
-        { name: 'Roblox Profile', value: ans.roblox_profile || 'N/A', inline: true },
-        { name: 'Timezone & Availability', value: ans.schedule_timezone || 'N/A', inline: true },
-        { name: 'About Yourself & ER:LC Background', value: ans.background_erlc || 'N/A', inline: false },
-        { name: 'Previous Moderation History', value: ans.previous_history || 'N/A', inline: false },
-        { name: 'Why Orlando Roleplay Specifically?', value: ans.why_orlando || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 2 of 4 • Candidate Background & History`,
+        `> **Roblox Profile & User ID**`,
+        `• \`${ans.roblox_profile || 'N/A'}\``,
+        '',
+        `> **Timezone & Weekly Availability**`,
+        `• ${ans.schedule_timezone || 'N/A'}`,
+        '',
+        `> **ER:LC Background & Interests**`,
+        ans.background_erlc ? ans.background_erlc.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **Previous Moderation History**`,
+        ans.previous_history ? ans.previous_history.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **Why Orlando Roleplay Specifically?**`,
+        ans.why_orlando ? ans.why_orlando.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     } else {
-      embed.addFields(
-        { name: 'Motivation for Orlando Discord', value: ans.motivation || 'N/A', inline: false },
-        { name: 'Previous Discord Experience & Bots', value: ans.discord_exp || 'N/A', inline: false },
-        { name: 'Unique Traits & Assets', value: ans.candidate_strengths || 'N/A', inline: false },
-        { name: 'Handling Bias & Impartiality', value: ans.handling_bias || 'N/A', inline: false },
-        { name: 'Prior Infractions History', value: ans.prior_infractions || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 2 of 4 • Motivation & Discord History`,
+        `> **Motivation for Orlando Staff**`,
+        ans.motivation ? ans.motivation.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **Previous Discord Experience & Bot Knowledge**`,
+        ans.discord_exp ? ans.discord_exp.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **Unique Traits & Assets**`,
+        ans.candidate_strengths ? ans.candidate_strengths.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **Handling Bias & Impartiality**`,
+        ans.handling_bias ? ans.handling_bias.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **Prior Infractions & Disciplinary History**`,
+        ans.prior_infractions ? ans.prior_infractions.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     }
   } else if (safePage === 2) {
     if (submission.role === 'ingame_mod') {
-      embed.addFields(
-        { name: 'FailRP Definition & Corrective Actions', value: ans.def_frp || 'N/A', inline: false },
-        { name: 'RDM & VDM + Evidentiary Standards', value: ans.def_rdm_vdm || 'N/A', inline: false },
-        { name: 'Metagaming & Powergaming Examples', value: ans.def_meta_power || 'N/A', inline: false },
-        { name: 'NLR & LTARP vs LTAP', value: ans.def_nlr_ltarp || 'N/A', inline: false },
-        { name: 'Key Admin Commands Proficiency', value: ans.key_commands || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 3 of 4 • Core Roleplay Knowledge & Rules`,
+        `> **1. FailRP Definition & Corrective Actions**`,
+        ans.def_frp ? ans.def_frp.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **2. RDM & VDM + Evidentiary Standards**`,
+        ans.def_rdm_vdm ? ans.def_rdm_vdm.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **3. Metagaming & Powergaming Examples**`,
+        ans.def_meta_power ? ans.def_meta_power.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **4. NLR & LTARP vs LTAP Distinction**`,
+        ans.def_nlr_ltarp ? ans.def_nlr_ltarp.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **5. Key Admin Commands Proficiency**`,
+        ans.key_commands ? ans.key_commands.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     } else {
-      embed.addFields(
-        { name: 'Handling Toxic Arguments in Chat', value: ans.scenario_toxicity || 'N/A', inline: false },
-        { name: 'Mass-Ping Raid & Phishing Containment', value: ans.scenario_raid || 'N/A', inline: false },
-        { name: 'Automod Bypass & Hidden Toxicity', value: ans.scenario_automod_bypass || 'N/A', inline: false },
-        { name: 'Ticket Dispute & Abuse Allegation', value: ans.scenario_ticket_dispute || 'N/A', inline: false },
-        { name: 'Banter vs Real Harassment Distinction', value: ans.scenario_banter || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 3 of 4 • Chat Moderation & Scenarios`,
+        `> **1. Handling Toxic Arguments in Chat**`,
+        ans.scenario_toxicity ? ans.scenario_toxicity.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **2. Mass-Ping Raid & Phishing Containment**`,
+        ans.scenario_raid ? ans.scenario_raid.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **3. Automod Bypass & Hidden Toxicity**`,
+        ans.scenario_automod_bypass ? ans.scenario_automod_bypass.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **4. Ticket Dispute & Abuse Allegation**`,
+        ans.scenario_ticket_dispute ? ans.scenario_ticket_dispute.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **5. Banter vs Real Harassment Distinction**`,
+        ans.scenario_banter ? ans.scenario_banter.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     }
   } else if (safePage === 3) {
     if (submission.role === 'ingame_mod') {
-      embed.addFields(
-        { name: 'Mod Call Parking Location & Protocol', value: ans.scenario_mod_parking || 'N/A', inline: false },
-        { name: 'Unproven RDM Investigation Procedure', value: ans.scenario_rdm_dispute || 'N/A', inline: false },
-        { name: 'Exploiter Response Protocol', value: ans.scenario_exploits || 'N/A', inline: false },
-        { name: 'Handling Colleague Command Abuse', value: ans.scenario_staff_abuse || 'N/A', inline: false },
-        { name: 'Affirmation & Verification', value: ans.verification_affirmation || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 4 of 4 • Realistic In-Game Scenarios & Affirmation`,
+        `> **1. Mod Call Parking Location & Protocol**`,
+        ans.scenario_mod_parking ? ans.scenario_mod_parking.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **2. Unproven RDM Investigation Procedure**`,
+        ans.scenario_rdm_dispute ? ans.scenario_rdm_dispute.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **3. Exploiter Response Protocol**`,
+        ans.scenario_exploits ? ans.scenario_exploits.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **4. Handling Colleague Command Abuse**`,
+        ans.scenario_staff_abuse ? ans.scenario_staff_abuse.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **5. Candidate Affirmation & Verification**`,
+        ans.verification_affirmation ? ans.verification_affirmation.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     } else {
-      embed.addFields(
-        { name: 'Sanction Progression (Warn, Mute, Kick, Ban)', value: ans.protocol_punishments || 'N/A', inline: false },
-        { name: 'Unauthorized Self-Promo / Invite Links', value: ans.protocol_selfpromo || 'N/A', inline: false },
-        { name: 'De-escalating Heated Ticket Conversations', value: ans.scenario_ticket_heated || 'N/A', inline: false },
-        { name: 'Critical Incident Escalation', value: ans.scenario_incident_escalation || 'N/A', inline: false },
-        { name: 'Affirmation & Verification', value: ans.verification_affirmation || 'N/A', inline: false }
-      );
+      pageContentText = [
+        `### Page 4 of 4 • Escalation Protocols & Affirmation`,
+        `> **1. Sanction Progression (Warn, Mute, Kick, Ban)**`,
+        ans.protocol_punishments ? ans.protocol_punishments.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **2. Unauthorized Self-Promo / Invite Links**`,
+        ans.protocol_selfpromo ? ans.protocol_selfpromo.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **3. De-escalating Heated Ticket Conversations**`,
+        ans.scenario_ticket_heated ? ans.scenario_ticket_heated.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **4. Critical Incident Escalation**`,
+        ans.scenario_incident_escalation ? ans.scenario_incident_escalation.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
+        '',
+        `> **5. Candidate Affirmation & Verification**`,
+        ans.verification_affirmation ? ans.verification_affirmation.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+      ].join('\n');
     }
   }
 
-  // Row 1: Arrow Pagination
   const leftEmojiId = CONFIG.APPLICATIONS?.ARROW_LEFT_EMOJI_ID || '1550446757396348958';
   const rightEmojiId = CONFIG.APPLICATIONS?.ARROW_RIGHT_EMOJI_ID || '1550446417376448593';
 
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`app_page_prev_${submission.id}_${safePage}`)
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji(leftEmojiId)
-      .setDisabled(safePage === 0),
-    new ButtonBuilder()
-      .setCustomId(`app_page_info_${submission.id}`)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel(`${safePage + 1} / ${totalPages}`)
-      .setDisabled(true),
-    new ButtonBuilder()
-      .setCustomId(`app_page_next_${submission.id}_${safePage}`)
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji(rightEmojiId)
-      .setDisabled(safePage === totalPages - 1)
-  );
+  const containerComponents = [
+    // 1. Top Banner
+    {
+      type: 12,
+      items: [
+        {
+          media: {
+            url: topBannerMediaUrl
+          }
+        }
+      ]
+    },
+    // 2. Title & Header
+    {
+      type: 10,
+      content:
+        `## Orlando Roleplay | Staff Application Review\n` +
+        `> Official Staff Evaluation & Confidential Candidate Dossier • **${roleName}**`
+    },
+    // 3. Candidate Section with Status Pill
+    {
+      type: 9,
+      components: [
+        {
+          type: 10,
+          content:
+            `**Candidate Information**\n` +
+            `• **Applicant:** <@${submission.userId}> (\`${submission.userTag || submission.userId}\`)\n` +
+            `• **Position Applied:** **${roleName}** • \`#${submission.id.slice(0, 8).toUpperCase()}\`\n` +
+            `• **Submitted:** <t:${Math.floor(submission.submittedAt / 1000)}:f> (<t:${Math.floor(submission.submittedAt / 1000)}:R>)`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: statusPillStyle,
+        label: statusPillLabel,
+        disabled: true,
+        custom_id: 'app_review_status_pill'
+      }
+    }
+  ];
 
-  // Row 2: Decisions
-  const isPending = submission.status === 'pending';
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`app_approve_${submission.id}`)
-      .setLabel('Approve')
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(!isPending),
-    new ButtonBuilder()
-      .setCustomId(`app_deny_${submission.id}`)
-      .setLabel('Deny')
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(!isPending)
-  );
+  // 4. Executive Decision Box (if reviewed)
+  if (submission.reviewedBy) {
+    containerComponents.push({
+      type: 10,
+      content:
+        `### Staff Executive Decision\n` +
+        `> • **Reviewed By:** <@${submission.reviewedBy}>\n` +
+        `> • **Decision Date:** <t:${Math.floor((submission.reviewedAt || Date.now()) / 1000)}:f>\n` +
+        (submission.notes ? `> • **Staff Notes / Feedback:** ${submission.notes}\n` : '')
+    });
+  }
 
-  return { embeds: [embed], components: [row1, row2] };
+  // 5. Answers Display for Current Page
+  containerComponents.push({
+    type: 10,
+    content: pageContentText
+  });
+
+  // 6. Navigation Action Row
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        emoji: { id: leftEmojiId },
+        custom_id: `app_page_prev_${submission.id}_${safePage}`,
+        disabled: safePage === 0
+      },
+      {
+        type: 2,
+        style: 2,
+        label: `Page ${safePage + 1} of ${totalPages}`,
+        disabled: true,
+        custom_id: `app_page_info_${submission.id}`
+      },
+      {
+        type: 2,
+        style: 2,
+        emoji: { id: rightEmojiId },
+        custom_id: `app_page_next_${submission.id}_${safePage}`,
+        disabled: safePage === totalPages - 1
+      }
+    ]
+  });
+
+  // 7. Review Decisions Action Row
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 3, // Success Green
+        label: 'Approve Application',
+        custom_id: `app_approve_${submission.id}`,
+        disabled: !isPending
+      },
+      {
+        type: 2,
+        style: 4, // Danger Red
+        label: 'Deny Application',
+        custom_id: `app_deny_${submission.id}`,
+        disabled: !isPending
+      }
+    ]
+  });
+
+  // 8. Micro Footer
+  containerComponents.push({
+    type: 10,
+    content: `-# Orlando Roleplay Staff Administration • Confidential Dossier #${submission.id.slice(0, 8).toUpperCase()}`
+  });
+
+  // 9. Bottom Accent Banner
+  if (CONFIG.SESSION?.BOTTOM_BANNER_URL) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+          }
+        }
+      ]
+    });
+  }
+
+  return {
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // Container
+        components: containerComponents
+      }
+    ],
+    files
+  };
 }
 
 /**
@@ -1113,9 +1281,9 @@ export function buildApplicationResultV2(submission) {
         },
         {
           type: 2,
-          style: 2, // Secondary Gray
+          style: 1, // Primary Blurple for Call To Action
           label: 'Open Training Ticket',
-          custom_id: 'app_result_btn_ticket'
+          custom_id: `app_training_ticket_${submission.userId}_${submission.id}`
         }
       ]
     },
@@ -1246,9 +1414,9 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
             },
             {
               type: 2,
-              style: 2, // Gray
+              style: 1, // Primary Blurple
               label: 'Open Training Ticket',
-              custom_id: 'app_dm_btn_ticket'
+              custom_id: `app_training_ticket_${userId}`
             }
           ]
         : [

@@ -73,8 +73,10 @@ export function parseDuration(str) {
  * Builds the chill, clean Giveaway Card with custom emoji and entry button.
  */
 export function buildGiveawayCard(giveaway, hasEnded = false) {
+  giveaway.entries = Array.isArray(giveaway.entries) ? giveaway.entries : [];
   const endsTimestamp = Math.floor(giveaway.endsAt / 1000);
-  const entryCount = (giveaway.entries || []).length;
+  const entryCount = giveaway.entries.length;
+  const gid = giveaway.id || 'msg';
 
   let contentText = '';
   if (hasEnded) {
@@ -122,7 +124,7 @@ export function buildGiveawayCard(giveaway, hasEnded = false) {
                 style: hasEnded ? 2 : 1, // Primary if active, Secondary if ended
                 label: hasEnded ? 'Giveaway Ended' : 'Enter Giveaway',
                 emoji: GIVEAWAY_EMOJI_OBJ,
-                custom_id: `giveaway_enter_${giveaway.id}`,
+                custom_id: `giveaway_enter_${gid}`,
                 disabled: hasEnded
               },
               {
@@ -130,7 +132,7 @@ export function buildGiveawayCard(giveaway, hasEnded = false) {
                 style: 2, // Secondary Gray Pill
                 label: `${entryCount} ${entryCount === 1 ? 'Entry' : 'Entries'}`,
                 disabled: true,
-                custom_id: `giveaway_pill_${giveaway.id}`
+                custom_id: `giveaway_pill_${gid}`
               }
             ]
           }
@@ -317,6 +319,78 @@ export function findConcludedGiveaway(query = null, channelId = null) {
     return endedAll.sort((a, b) => (b.endsAt || b.startedAt) - (a.endsAt || a.startedAt))[0];
   }
 
-  return null;
+/**
+ * Extracts text recursively from Discord message components.
+ */
+function extractTextFromComponents(components) {
+  let text = '';
+  if (!Array.isArray(components)) return text;
+  for (const comp of components) {
+    if (comp.content) text += '\n' + comp.content;
+    if (Array.isArray(comp.components)) {
+      text += '\n' + extractTextFromComponents(comp.components);
+    }
+  }
+  return text;
 }
+
+/**
+ * Recovers or reconstructs a giveaway record directly from an active Discord message.
+ */
+export function recoverGiveawayFromMessage(message) {
+  if (!message) return null;
+
+  let text = (message.content || '') + '\n' + extractTextFromComponents(message.components);
+  if (!text.toLowerCase().includes('ends') && !text.toLowerCase().includes('hosted')) {
+    return null;
+  }
+
+  // Parse prize from ### <:Giveaway:...> prize or ### prize
+  let prize = 'Giveaway';
+  const prizeMatch = text.match(/###\s*(?:<:[^>]+>)?\s*([^\n\r(]+)/);
+  if (prizeMatch && prizeMatch[1].trim()) {
+    prize = prizeMatch[1].replace(/\(Ended\)/i, '').trim();
+  }
+
+  // Parse hostId from <@123456789>
+  let hostId = message.author?.id || 'Unknown';
+  const hostMatch = text.match(/Hosted by\*\*:\s*<@!?(\d+)>/i);
+  if (hostMatch) {
+    hostId = hostMatch[1];
+  }
+
+  // Parse endsAt timestamp from <t:1234567890:...>
+  let endsAt = Date.now() + 60 * 60 * 1000;
+  const endsMatch = text.match(/Ends\*\*:\s*<t:(\d+):/i);
+  if (endsMatch) {
+    endsAt = parseInt(endsMatch[1], 10) * 1000;
+  }
+
+  // Parse winnerCount from `1`
+  let winnerCount = 1;
+  const winnerMatch = text.match(/Winners\*\*:\s*`(\d+)`/i);
+  if (winnerMatch) {
+    winnerCount = Math.max(1, parseInt(winnerMatch[1], 10) || 1);
+  }
+
+  const isEnded = text.toLowerCase().includes('(ended)') || Date.now() >= endsAt;
+
+  const giveaway = {
+    id: message.id,
+    channelId: message.channelId || message.channel?.id,
+    guildId: message.guildId || message.guild?.id,
+    prize: prize,
+    hostId: hostId,
+    winnerCount: winnerCount,
+    entries: [],
+    startedAt: message.createdTimestamp || Date.now(),
+    endsAt: endsAt,
+    ended: isEnded,
+    winners: []
+  };
+
+  saveGiveaway(giveaway);
+  return giveaway;
+}
+
 

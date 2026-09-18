@@ -120,12 +120,142 @@ export function buildRulesEmbed() {
 }
 
 /**
- * Builds the inside-ticket control card using Components V2 Container:
+ * Builds the inside-ticket control card for staff onboarding and training using Components V2 Container:
  * - Top Banner inside at top
+ * - Onboarding information, assigned position, reasons & next steps
+ * - Claim, Close and Position pill controls
+ */
+export function buildTrainingTicketControl(ticketData) {
+  const isClaimed = Boolean(ticketData.claimedBy);
+  const handlerText = isClaimed ? `<@${ticketData.claimedBy}>` : 'None (Awaiting Management)';
+  const statusText = isClaimed ? '**Claimed**' : '**Unclaimed**';
+  const roleName = ticketData.role || 'Staff Member';
+
+  const containerComponents = [
+    // 1. Top Banner inside ticket container
+    {
+      type: 12,
+      items: [
+        {
+          media: {
+            url: CONFIG.TOP_BANNER_URL
+          }
+        }
+      ]
+    },
+    // 2. Title and Onboarding Header
+    {
+      type: 10,
+      content:
+        `## Orlando Support | Staff Training & Onboarding\n` +
+        `> Welcome <@${ticketData.authorId}> to the **Orlando Roleplay** staff team!\n` +
+        `> This private onboarding channel has been prepared for your staff orientation and in-game training.`
+    },
+    // 3. Section with Green Accepted Status Pill
+    {
+      type: 9,
+      components: [
+        {
+          type: 10,
+          content:
+            `**Appointed Staff Member**\n` +
+            `• **Applicant:** <@${ticketData.authorId}> (\`${ticketData.authorTag || ticketData.authorId}\`)\n` +
+            `• **Assigned Position:** **${roleName}**\n` +
+            `• **Handler:** ${handlerText} (${statusText})`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 3, // Success Green
+        label: 'Accepted',
+        disabled: true,
+        custom_id: 'ticket_training_status_pill'
+      }
+    },
+    // 4. Ticket Purpose & Onboarding Reason
+    {
+      type: 10,
+      content:
+        `### Ticket Purpose & Onboarding Reason\n` +
+        `> • **Primary Reason:** Staff Orientation, Permission Allocation & In-Game Patrol Training for **${roleName}**.\n` +
+        (ticketData.reviewedBy ? `> • **Approved By:** <@${ticketData.reviewedBy}>\n` : '') +
+        (ticketData.notes ? `> • **Management Notes:** ${ticketData.notes}\n` : '') +
+        `\n### Next Steps & Instructions\n` +
+        `> **1. Role & Permissions:** Management will assign your in-game & Discord staff permissions.\n` +
+        `> **2. Staff Orientation:** A Management member will walk you through the staff guidelines and expectations.\n` +
+        `> **3. Patrol Training:** Your practical in-game patrol training session will be scheduled directly here.\n\n` +
+        `*Please reply below with your Roblox username and your availability for training.*`
+    },
+    // 5. Action Row with Claim, Close and Position Pill
+    {
+      type: 1,
+      components: [
+        isClaimed
+          ? {
+              type: 2,
+              style: 2, // Secondary
+              label: 'Unclaim',
+              custom_id: 'ticket_unclaim'
+            }
+          : {
+              type: 2,
+              style: 3, // Success (Green)
+              label: 'Claim',
+              custom_id: 'ticket_claim'
+            },
+        {
+          type: 2,
+          style: 4, // Danger (Red)
+          label: 'Close Ticket',
+          custom_id: 'ticket_close_request'
+        },
+        {
+          type: 2,
+          style: 2, // Secondary Gray Pill
+          label: roleName,
+          disabled: true,
+          custom_id: 'ticket_training_role_pill'
+        }
+      ]
+    }
+  ];
+
+  // 6. Bottom Banner Accent Strip
+  if (CONFIG.BOTTOM_BANNER_URL) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: CONFIG.BOTTOM_BANNER_URL
+          }
+        }
+      ]
+    });
+  }
+
+  return {
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // Container
+        components: containerComponents
+      }
+    ]
+  };
+}
+
+/**
+ * Builds the ticket control panel using Discord Components V2 Container (type 17):
+ * - Banner at top (type 12)
  * - Title without emdashes (Orlando Support | Category)
  * - Claim and Close buttons INSIDE the container
  */
 export function buildTicketControl(ticketData) {
+  if (ticketData?.category === 'training') {
+    return buildTrainingTicketControl(ticketData);
+  }
+
   const isClaimed = Boolean(ticketData.claimedBy);
   const handlerText = isClaimed ? `<@${ticketData.claimedBy}>` : 'None (Awaiting Staff)';
   const statusText = isClaimed ? '**Claimed**' : '**Unclaimed**';

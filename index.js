@@ -80,6 +80,7 @@ import {
   checkActiveGiveaways,
   findActiveGiveaway,
   findConcludedGiveaway,
+  recoverGiveawayFromMessage,
   GIVEAWAY_EMOJI
 } from './giveawayManager.js';
 import { randomUUID } from 'crypto';
@@ -832,6 +833,7 @@ client.on(Events.MessageCreate, async message => {
         const sentMsg = await message.channel.send(cardPayload);
         giveaway.id = sentMsg.id;
         saveGiveaway(giveaway);
+        await sentMsg.edit(buildGiveawayCard(giveaway, false)).catch(() => null);
         await message.delete().catch(() => null);
       } catch (err) {
         console.error('Prefix giveaway start error:', err);
@@ -1237,6 +1239,7 @@ client.on(Events.InteractionCreate, async interaction => {
             const sentMsg = await targetChannel.send(cardPayload);
             giveaway.id = sentMsg.id;
             saveGiveaway(giveaway);
+            await sentMsg.edit(buildGiveawayCard(giveaway, false)).catch(() => null);
 
             return interaction.editReply({
               content: `${GIVEAWAY_EMOJI} Giveaway for **${prize}** successfully created in <#${targetChannel.id}>!`
@@ -2311,12 +2314,214 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // Application Training Ticket Info Button (Results Card & DM)
-      if (interaction.customId === 'app_result_btn_ticket' || interaction.customId === 'app_dm_btn_ticket') {
-        return interaction.reply({
-          content: 'To claim your staff permissions and schedule your staff orientation & patrol training, please open a ticket in <#1548146597743960146>.',
-          ephemeral: true
-        });
+      // Open Training Ticket Button (From Acceptance Results Card & DM)
+      if (interaction.customId.startsWith('app_training_ticket_') || interaction.customId === 'app_result_btn_ticket' || interaction.customId === 'app_dm_btn_ticket') {
+        let targetUserId = null;
+        let targetSubId = null;
+
+        if (interaction.customId.startsWith('app_training_ticket_')) {
+          const parts = interaction.customId.replace('app_training_ticket_', '').split('_');
+          targetUserId = parts[0] || null;
+          targetSubId = parts[1] || null;
+        }
+
+        // Security / Permission Check: Only the accepted user can open their training ticket
+        if (targetUserId && interaction.user.id !== targetUserId) {
+          return interaction.reply({
+            content: `⚠️ Only the accepted applicant (<@${targetUserId}>) can open their training ticket.`,
+            ephemeral: true
+          });
+        }
+
+        // Find the application submission
+        let submission = targetSubId ? getSubmission(targetSubId) : null;
+        if (!submission) {
+          const appsData = loadApplicationsData();
+          const userSubmissions = Object.values(appsData.submissions || {}).filter(
+            s => s.userId === interaction.user.id && s.status === 'approved'
+          );
+          if (userSubmissions.length > 0) {
+            submission = userSubmissions.sort((a, b) => (b.reviewedAt || b.submittedAt) - (a.reviewedAt || a.submittedAt))[0];
+          }
+        }
+
+        if (!submission && !targetUserId) {
+          return interaction.reply({
+            content: '⚠️ You do not have an approved staff application to open a training ticket.',
+            ephemeral: true
+          });
+        }
+
+        // Resolve Guild context (supports clicking from DM or server)
+        const guild = interaction.guild || client.guilds.cache.get('1541210827967823955') || client.guilds.cache.first();
+        if (!guild) {
+          return interaction.reply({
+            content: 'Could not resolve server to create your training ticket.',
+            ephemeral: true
+          });
+        }
+
+        // Check if user already has an active training/support ticket
+        const allTickets = loadTicketsData();
+        const existingTicket = Object.values(allTickets.active || {}).find(
+          t => t.authorId === interaction.user.id && (t.category === 'training' || t.category === 'management')
+        );
+        if (existingTicket) {
+          const channelExists = guild.channels.cache.has(existingTicket.channelId) ||
+                                await guild.channels.fetch(existingTicket.channelId).catch(() => null);
+          if (channelExists) {
+            return interaction.reply({
+              content: `You already have an open ticket in <#${existingTicket.channelId}>. Please use your existing ticket.`,
+              ephemeral: true
+            });
+          } else {
+            deleteActiveTicket(existingTicket.channelId);
+          }
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        // Category: Management category 1548330987128229989
+        const targetManagementCategoryId = '1548330987128229989';
+        let parentCategoryId = null;
+
+        const targetCatExists = guild.channels.cache.get(targetManagementCategoryId) ||
+                                await guild.channels.fetch(targetManagementCategoryId).catch(() => null);
+        if (targetCatExists) {
+          parentCategoryId = targetManagementCategoryId;
+        } else {
+          // Fallback to configured management category
+          const mgmtCategory = CONFIG.CATEGORIES.find(c => c.id === 'management');
+          const candidateCategoryIds = Array.isArray(mgmtCategory?.categoryIds)
+            ? mgmtCategory.categoryIds
+            : [mgmtCategory?.categoryId].filter(Boolean);
+
+          for (const catId of candidateCategoryIds) {
+            if (catId) {
+              const exists = guild.channels.cache.has(catId) ||
+                             await guild.channels.fetch(catId).catch(() => null);
+              if (exists) {
+                parentCategoryId = catId;
+                break;
+              }
+            }
+          }
+        }
+
+        // Channel Permissions: ONLY the accepted user, bot, and staff/management can view
+        const permissionOverwrites = [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: interaction.user.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.EmbedLinks
+            ]
+          },
+          {
+            id: client.user.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.ManageMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.EmbedLinks
+            ]
+          }
+        ];
+
+        // Add staff and management roles
+        for (const roleId of CONFIG.STAFF_ROLE_IDS) {
+          if (roleId && !roleId.includes('PASTE') && guild.roles.cache.has(roleId)) {
+            permissionOverwrites.push({
+              id: roleId,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.EmbedLinks
+              ]
+            });
+          }
+        }
+
+        const roleName = getRoleDisplayName(submission?.role || 'ingame_mod');
+        const cleanUsername = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const channelName = `training-${cleanUsername || 'appointee'}`;
+
+        try {
+          const ticketChannel = await guild.channels.create({
+            name: channelName,
+            type: ChannelType.GuildText,
+            parent: parentCategoryId,
+            permissionOverwrites: permissionOverwrites,
+            topic: `Staff Training & Onboarding | Appointee: ${interaction.user.tag} (${interaction.user.id}) | Role: ${roleName}`
+          });
+
+          const ticketData = {
+            channelId: ticketChannel.id,
+            channelName: ticketChannel.name,
+            authorId: interaction.user.id,
+            authorTag: interaction.user.tag,
+            category: 'training',
+            categoryLabel: 'Staff Training & Onboarding',
+            role: roleName,
+            reason: `Staff Orientation, Permission Allocation & In-Game Patrol Training for ${roleName}`,
+            reviewedBy: submission?.reviewedBy || null,
+            notes: submission?.notes || null,
+            submissionId: submission?.id || null,
+            claimedBy: null,
+            claimedTag: null,
+            createdAt: Date.now()
+          };
+
+          // Ping applicant and staff
+          const staffPings = CONFIG.STAFF_ROLE_IDS
+            .filter(r => r && !r.includes('PASTE') && guild.roles.cache.has(r))
+            .map(r => `<@&${r}>`)
+            .join(' ');
+
+          const pingMessage = `<@${interaction.user.id}> ${staffPings}`.trim();
+          await ticketChannel.send({ content: pingMessage });
+
+          // Send Components V2 Training Control Card
+          const controlPayload = buildTicketControl(ticketData);
+          const controlMessage = await ticketChannel.send(controlPayload);
+
+          ticketData.controlMessageId = controlMessage.id;
+          saveActiveTicket(ticketChannel.id, ticketData);
+
+          // Pin the control message and delete system pin notification
+          try {
+            await controlMessage.pin();
+            await new Promise(r => setTimeout(r, 600));
+            const recentMsgs = await ticketChannel.messages.fetch({ limit: 6 }).catch(() => null);
+            if (recentMsgs) {
+              const pinNotice = recentMsgs.find(m => m.system || m.type === 6);
+              if (pinNotice) await pinNotice.delete().catch(() => null);
+            }
+          } catch (pinErr) {
+            console.warn('Could not pin training ticket control embed:', pinErr.message);
+          }
+
+          return interaction.editReply({
+            content: `Your staff training ticket has been created: <#${ticketChannel.id}>`
+          });
+        } catch (createErr) {
+          console.error('Failed to create training ticket channel:', createErr);
+          return interaction.editReply({
+            content: `Failed to create training ticket channel: ${createErr.message}`
+          });
+        }
       }
 
       // Staff Review Pagination: Previous Page
@@ -2692,23 +2897,45 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // Giveaway Entry Toggle Button
       if (interaction.customId.startsWith('giveaway_enter_')) {
-        const giveawayId = interaction.customId.replace('giveaway_enter_', '');
-        const giveaway = getGiveaway(giveawayId);
+        const rawId = interaction.customId.replace('giveaway_enter_', '').trim();
+        let giveaway = (rawId && rawId !== 'null' && rawId !== 'msg') ? getGiveaway(rawId) : null;
+
+        // Fallback 1: Resolve by message ID
+        if (!giveaway && interaction.message?.id) {
+          giveaway = getGiveaway(interaction.message.id);
+        }
+
+        // Fallback 2: Resolve active giveaway in this channel
+        if (!giveaway) {
+          giveaway = findActiveGiveaway(null, interaction.channelId);
+        }
+
+        // Fallback 3: Automatically recover giveaway record from message components if missing from storage
+        if (!giveaway && interaction.message) {
+          giveaway = recoverGiveawayFromMessage(interaction.message);
+        }
 
         if (!giveaway) {
           return interaction.reply({
-            content: 'Could not find giveaway record.',
-            flags: 64
+            content: 'Could not find giveaway record. This giveaway may have been removed.',
+            ephemeral: true
           });
+        }
+
+        // Ensure giveaway.id is aligned with the actual Discord message
+        if (interaction.message?.id && giveaway.id !== interaction.message.id) {
+          giveaway.id = interaction.message.id;
+          saveGiveaway(giveaway);
         }
 
         if (giveaway.ended) {
           return interaction.reply({
             content: 'This giveaway has already concluded.',
-            flags: 64
+            ephemeral: true
           });
         }
 
+        giveaway.entries = Array.isArray(giveaway.entries) ? giveaway.entries : [];
         const userId = interaction.user.id;
         const entryIndex = giveaway.entries.indexOf(userId);
         let feedback = '';
@@ -2722,15 +2949,20 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         saveGiveaway(giveaway);
-        await interaction.reply({ content: feedback, flags: 64 });
+        await interaction.reply({ content: feedback, ephemeral: true });
 
         // Update giveaway card in channel
         try {
-          const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
-          if (channel) {
-            const msg = await channel.messages.fetch(giveaway.id).catch(() => null);
-            if (msg) {
-              await msg.edit(buildGiveawayCard(giveaway, false)).catch(() => null);
+          const updatedCard = buildGiveawayCard(giveaway, false);
+          if (interaction.message) {
+            await interaction.message.edit(updatedCard).catch(() => null);
+          } else {
+            const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
+            if (channel) {
+              const msg = await channel.messages.fetch(giveaway.id).catch(() => null);
+              if (msg) {
+                await msg.edit(updatedCard).catch(() => null);
+              }
             }
           }
         } catch (updateErr) {
