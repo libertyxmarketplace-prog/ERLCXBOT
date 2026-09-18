@@ -1,0 +1,119 @@
+{
+  "votes": {
+    "vote_1789691346058": {
+      "id": "vote_1789691346058",
+      "channelId": "1544355964910571672",
+      "messageId": "1550302593329397794",
+      "hostId": "523693281541095424",
+      "requiredVotes": 2,
+      "voters": [],
+      "pingRoleId": "1548336459315019797",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789691346058,
+      "expiresAt": 1789777746058,
+      "status": "active"
+    },
+    "vote_1789691663310": {
+      "id": "vote_1789691663310",
+      "channelId": "1544355964910571672",
+      "messageId": "1550303923322101831",
+      "hostId": "523693281541095424",
+      "hostName": "Eazykims",
+      "requiredVotes": 2,
+      "voters": [
+        "523693281541095424",
+        "1144463531362746418"
+      ],
+      "pingRoleId": "1548336459315019797",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789691663310,
+      "expiresAt": 1789778063310,
+      "status": "started"
+    },
+    "vote_1789692325884": {
+      "id": "vote_1789692325884",
+      "channelId": "1544355964910571672",
+      "messageId": "1550306702350360677",
+      "hostId": "523693281541095424",
+      "hostName": "Eazykims",
+      "requiredVotes": 1,
+      "voters": [
+        "523693281541095424"
+      ],
+      "pingRoleId": "1548336459315019797",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789692325884,
+      "expiresAt": 1789778725884,
+      "status": "started",
+      "completionNotified": true
+    },
+    "vote_1789692757774": {
+      "id": "vote_1789692757774",
+      "channelId": "1544355964910571672",
+      "messageId": "1550308513933295670",
+      "hostId": "523693281541095424",
+      "hostName": "Eazykims",
+      "requiredVotes": 1,
+      "voters": [
+        "523693281541095424"
+      ],
+      "pingRoleId": "1548336459315019797",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789692757774,
+      "expiresAt": 1789779157774,
+      "status": "started",
+      "completionNotified": true
+    },
+    "vote_1789693018436": {
+      "id": "vote_1789693018436",
+      "channelId": "1544355964910571672",
+      "messageId": "1550309607501471795",
+      "hostId": "523693281541095424",
+      "hostName": "Eazykims",
+      "requiredVotes": 1,
+      "voters": [
+        "523693281541095424"
+      ],
+      "pingRoleId": "1544497502210756658",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789693018436,
+      "expiresAt": 1789779418436,
+      "status": "started",
+      "completionNotified": true
+    },
+    "vote_1789693119143": {
+      "id": "vote_1789693119143",
+      "channelId": "1544355964910571672",
+      "messageId": "1550310029402570774",
+      "hostId": "1144463531362746418",
+      "hostName": "shots",
+      "requiredVotes": 5,
+      "voters": [
+        "523693281541095424"
+      ],
+      "pingRoleId": "1548336459315019797",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789693119143,
+      "expiresAt": 1789779519143,
+      "status": "active"
+    },
+    "vote_1789693183118": {
+      "id": "vote_1789693183118",
+      "channelId": "1544355964910571672",
+      "messageId": "1550310298597064729",
+      "hostId": "1144463531362746418",
+      "hostName": "shots",
+      "requiredVotes": 2,
+      "voters": [
+        "1144463531362746418",
+        "523693281541095424"
+      ],
+      "pingRoleId": "1548336459315019797",
+      "durationLabel": "30 Minutes",
+      "createdAt": 1789693183118,
+      "expiresAt": 1789779583118,
+      "status": "started",
+      "completionNotified": true
+    }
+  }
+}

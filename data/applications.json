@@ -1,0 +1,98 @@
+{
+  "submissions": {
+    "cd2a0694-1501-4d31-aab5-fbd50f4a13e5": {
+      "id": "cd2a0694-1501-4d31-aab5-fbd50f4a13e5",
+      "userId": "523693281541095424",
+      "userTag": "kims3166",
+      "userAvatar": "https://cdn.discordapp.com/avatars/523693281541095424/017539e31b5e11274ac60c88cfa7af8b.webp",
+      "role": "ingame_mod",
+      "answers": {
+        "discord_username": "kims3166",
+        "discord_user_id": "523693281541095424",
+        "rule_regulations": "yes",
+        "current_age": "yes",
+        "functional_mic": "yes",
+        "recording_software": "yes",
+        "urgent_availability": "yes",
+        "roblox_profile": "23233123",
+        "schedule_timezone": "yes",
+        "background_erlc": "yes",
+        "previous_history": "yes",
+        "why_orlando": "yes",
+        "def_frp": "sadsad",
+        "def_rdm_vdm": "sadsad",
+        "def_meta_power": "sadasd",
+        "def_nlr_ltarp": "sadsad",
+        "key_commands": "sadasd",
+        "scenario_mod_parking": "test",
+        "scenario_rdm_dispute": "test",
+        "scenario_exploits": "test",
+        "scenario_staff_abuse": "test",
+        "verification_affirmation": "yes"
+      },
+      "submittedAt": 1789727751169,
+      "status": "approved",
+      "reviewedBy": "523693281541095424",
+      "reviewedAt": 1789727814947,
+      "notes": "Good job",
+      "reviewMessageId": "1550455308307136614",
+      "reviewChannelId": "1550446015859925012"
+    },
+    "9bf889c9-d3a8-49c9-aee1-ac457d317504": {
+      "id": "9bf889c9-d3a8-49c9-aee1-ac457d317504",
+      "userId": "523693281541095424",
+      "userTag": "kims3166",
+      "userAvatar": "https://cdn.discordapp.com/avatars/523693281541095424/017539e31b5e11274ac60c88cfa7af8b.webp",
+      "role": "discord_mod",
+      "answers": {
+        "discord_username": "kims3166",
+        "discord_user_id": "523693281541095424",
+        "rule_regulations": "ye",
+        "current_age": "y",
+        "functional_mic": "y",
+        "timezone": "y",
+        "weekly_schedule": "y",
+        "motivation": "y",
+        "discord_exp": "y",
+        "candidate_strengths": "y",
+        "handling_bias": "y",
+        "prior_infractions": "y",
+        "scenario_toxicity": "y",
+        "scenario_raid": "y",
+        "scenario_automod_bypass": "y",
+        "scenario_ticket_dispute": "y",
+        "scenario_banter": "y",
+        "protocol_punishments": "y",
+        "protocol_selfpromo": "y",
+        "scenario_ticket_heated": "y",
+        "scenario_incident_escalation": "y",
+        "verification_affirmation": "y"
+      },
+      "submittedAt": 1789728188688,
+      "status": "pending",
+      "reviewedBy": null,
+      "reviewedAt": null,
+      "notes": null,
+      "reviewMessageId": "1550457143222607883",
+      "reviewChannelId": "1550446015859925012"
+    }
+  },
+  "activeSessions": {
+    "1144463531362746418": {
+      "role": "ingame_mod",
+      "modules": {
+        "mod1": false,
+        "mod2": false,
+        "mod3": false,
+        "mod4": false
+      },
+      "answers": {
+        "discord_username": "northauthority",
+        "discord_user_id": "1144463531362746418"
+      },
+      "startedAt": 1789728213541
+    }
+  },
+  "reviewChannelId": "1550446015859925012",
+  "resultsChannelId": "1550413729013829725"
+}

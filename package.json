@@ -1,0 +1,15 @@
+{
+  "name": "orlando-bot",
+  "version": "1.0.0",
+  "description": "Production-ready Discord Ticket System using discord.js v14 ESM",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7"
+  }
+}
