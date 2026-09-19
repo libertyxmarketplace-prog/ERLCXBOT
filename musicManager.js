@@ -74,7 +74,12 @@ export async function getTrackMetadata(target) {
   return new Promise((resolve, reject) => {
     const bin = getYtdlExecutable();
     const cleanTarget = sanitizeTrackUrl(target);
+    const cookiesPath = path.resolve(process.cwd(), 'cookies.txt');
+    const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
+
     const args = [
+      '--extractor-args', 'youtube:player_client=android,web,tv_embedded',
+      ...cookieArgs,
       '--dump-single-json',
       '--no-playlist',
       '--no-warnings',
@@ -181,10 +186,14 @@ class MusicQueue {
     try {
       const bin = getYtdlExecutable();
       const cleanUrl = sanitizeTrackUrl(track.url);
+      const cookiesPath = path.resolve(process.cwd(), 'cookies.txt');
+      const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
 
       console.log(`[Music] Launching stream for: ${cleanUrl} using ${bin}`);
       const cp = spawn(bin, [
         cleanUrl,
+        '--extractor-args', 'youtube:player_client=android,web,tv_embedded',
+        ...cookieArgs,
         '-o', '-',
         '-q',
         '-f', 'bestaudio/best',
