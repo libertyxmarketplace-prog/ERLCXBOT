@@ -4,12 +4,13 @@ import {
   createAudioResource,
   AudioPlayerStatus,
   VoiceConnectionStatus,
+  NoSubscriberBehavior,
   entersState,
   demuxProbe
 } from '@discordjs/voice';
 import fs from 'fs';
 import path from 'path';
-import youtubedl from 'youtube-dl-exec';
+import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 
 // Ensure prism-media and internal FFmpeg spawns immediately locate the bundled static binary
@@ -20,14 +21,14 @@ if (ffmpegPath) {
 const isWin = process.platform === 'win32';
 const customYtdlPath = path.resolve(process.cwd(), 'bin', isWin ? 'yt-dlp.exe' : 'yt-dlp');
 
-export function getYtdl() {
+export function getYtdlExecutable() {
   if (fs.existsSync(customYtdlPath)) {
     if (!isWin) {
       try { fs.chmodSync(customYtdlPath, 0o755); } catch {}
     }
-    return youtubedl.create(customYtdlPath);
+    return customYtdlPath;
   }
-  return youtubedl;
+  return isWin ? 'yt-dlp.exe' : 'yt-dlp';
 }
 
 export function initMusicEngine() {
@@ -66,6 +67,49 @@ export function sanitizeTrackUrl(input) {
   }
 }
 
+/**
+ * Extracts metadata for a track or query using native spawn to prevent memory leaks and stream hijacking.
+ */
+export async function getTrackMetadata(target) {
+  return new Promise((resolve, reject) => {
+    const bin = getYtdlExecutable();
+    const cleanTarget = sanitizeTrackUrl(target);
+    const args = [
+      '--dump-single-json',
+      '--no-playlist',
+      '--no-warnings',
+      '--default-search', 'ytsearch',
+      cleanTarget
+    ];
+    const cp = spawn(bin, args);
+    let stdout = '';
+    let stderr = '';
+
+    cp.stdout.on('data', chunk => {
+      stdout += chunk;
+    });
+    cp.stderr.on('data', chunk => {
+      stderr += chunk;
+    });
+
+    cp.on('error', err => {
+      reject(new Error(`Failed to launch yt-dlp: ${err.message}`));
+    });
+
+    cp.on('close', code => {
+      if (code !== 0) {
+        return reject(new Error(`yt-dlp failed (exit code ${code}): ${stderr.slice(0, 150)}`));
+      }
+      try {
+        const json = JSON.parse(stdout);
+        resolve(json);
+      } catch (err) {
+        reject(new Error(`Failed to parse yt-dlp output: ${err.message}`));
+      }
+    });
+  });
+}
+
 // Map storing active guild queues: guildId -> MusicQueue
 const guildQueues = new Map();
 
@@ -75,7 +119,12 @@ class MusicQueue {
     this.voiceChannel = voiceChannel;
     this.textChannel = textChannel;
     this.connection = null;
-    this.player = createAudioPlayer();
+    this.subscription = null;
+    this.player = createAudioPlayer({
+      behaviors: {
+        noSubscriber: NoSubscriberBehavior.Play
+      }
+    });
     this.tracks = [];
     this.currentTrack = null;
     this.currentResource = null;
@@ -88,6 +137,10 @@ class MusicQueue {
   }
 
   setupPlayerListeners() {
+    this.player.on('stateChange', (oldState, newState) => {
+      console.log(`[Music Player ${this.guildId}] State: ${oldState.status} -> ${newState.status}`);
+    });
+
     this.player.on(AudioPlayerStatus.Idle, () => {
       this.cleanupProcess();
 
@@ -126,22 +179,25 @@ class MusicQueue {
     this.currentTrack = track;
 
     try {
-      const ytdlInstance = getYtdl();
+      const bin = getYtdlExecutable();
       const cleanUrl = sanitizeTrackUrl(track.url);
 
-      const cp = ytdlInstance.exec(cleanUrl, {
-        output: '-',
-        format: 'bestaudio/best',
-        noWarnings: true,
-        noPlaylist: true,
-        preferFreeFormats: true,
-        ffmpegLocation: ffmpegPath
+      console.log(`[Music] Launching stream for: ${cleanUrl} using ${bin}`);
+      const cp = spawn(bin, [
+        cleanUrl,
+        '-o', '-',
+        '-q',
+        '-f', 'bestaudio/best',
+        '--no-playlist',
+        '--no-warnings'
+      ], {
+        stdio: ['ignore', 'pipe', 'pipe']
       });
 
       this.currentProcess = cp;
 
       cp.on('error', err => {
-        console.warn('[Music] yt-dlp child process error:', err.message);
+        console.warn('[Music] yt-dlp spawn error:', err.message);
       });
 
       if (cp.stderr) {
@@ -159,6 +215,7 @@ class MusicQueue {
         setTimeout(() => reject(new Error('Audio stream demux probe timed out after 15s')), 15000)
       );
       const probe = await Promise.race([probePromise, timeoutPromise]);
+      console.log(`[Music] Demux probe resolved stream type: ${probe.type}`);
 
       const resource = createAudioResource(probe.stream, {
         inputType: probe.type,
@@ -294,7 +351,7 @@ export async function joinVoice(voiceChannel, textChannel) {
     });
 
     queue.connection = connection;
-    connection.subscribe(queue.player);
+    queue.subscription = connection.subscribe(queue.player);
 
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
@@ -305,6 +362,10 @@ export async function joinVoice(voiceChannel, textChannel) {
       } catch {
         queue.destroy();
       }
+    });
+
+    connection.on('stateChange', (oldState, newState) => {
+      console.log(`[VoiceConnection ${voiceChannel.guild.id}] State: ${oldState.status} -> ${newState.status}`);
     });
 
     connection.on('error', err => {
@@ -338,20 +399,13 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
 
   const cleanQuery = query.trim();
   const isUrl = /^https?:\/\//i.test(cleanQuery);
-  const target = isUrl ? sanitizeTrackUrl(cleanQuery) : `ytsearch1:${cleanQuery}`;
+  const target = isUrl ? sanitizeTrackUrl(cleanQuery) : cleanQuery;
 
   let meta;
   try {
-    const ytdlInstance = getYtdl();
-    meta = await ytdlInstance(target, {
-      dumpSingleJson: true,
-      noWarnings: true,
-      noPlaylist: true,
-      defaultSearch: 'ytsearch',
-      ffmpegLocation: ffmpegPath
-    });
+    meta = await getTrackMetadata(target);
   } catch (err) {
-    console.error('Metadata extraction error:', err);
+    console.error('[Music] Metadata extraction error:', err);
     throw new Error(`Could not load track: ${err.message?.slice(0, 100) || 'Unknown error'}`);
   }
 
