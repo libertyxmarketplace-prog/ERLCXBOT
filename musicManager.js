@@ -85,20 +85,28 @@ function formatDuration(sec) {
 }
 
 /**
- * Fetches YouTube video title using Google's official public oEmbed API.
- * This endpoint never blocks cloud / datacenter IPs.
+ * Fetches YouTube video title using Noembed and Google's official public oEmbed API.
+ * Noembed runs outside YouTube's network and NEVER blocks cloud / datacenter IPs.
  */
-export async function getYoutubeTitleFromOembed(url) {
+export async function getTrackTitle(url) {
+  // 1. Try Noembed (hosted on Cloudflare/AWS, bypasses YouTube IP bans)
   try {
-    const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    const res = await fetch(endpoint);
+    const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
     if (res.ok) {
       const data = await res.json();
-      return data.title || null;
+      if (data.title) return data.title;
     }
-  } catch (err) {
-    console.warn('[Music] oEmbed lookup failed:', err.message);
-  }
+  } catch {}
+
+  // 2. Try official YouTube oEmbed endpoint
+  try {
+    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.title) return data.title;
+    }
+  } catch {}
+
   return null;
 }
 
@@ -154,35 +162,29 @@ export async function getTrackMetadata(target) {
   const cleanTarget = isUrl ? sanitizeTrackUrl(target) : target;
   const isYoutube = /youtube\.com|youtu\.be/i.test(cleanTarget);
 
-  const youtubeStrategies = [
-    ['--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs'],
-    ['--extractor-args', 'youtube:player_client=android,mweb'],
-    ['--extractor-args', 'youtube:player_client=tv_embedded,android']
-  ];
-
   let lastError = null;
 
   if (isYoutube) {
-    // 1. Try direct YouTube extraction
-    for (const strategy of youtubeStrategies) {
-      try {
-        const meta = await executeMetadataExtraction(cleanTarget, strategy);
-        return {
-          title: meta.title,
-          url: meta.webpage_url || meta.url || cleanTarget,
-          duration: meta.duration_string || formatDuration(meta.duration),
-          uploader: meta.uploader || 'YouTube'
-        };
-      } catch (err) {
-        lastError = err;
-        console.warn(`[Music] YouTube strategy failed (${strategy.join(' ')}):`, err.message);
-      }
+    // 1. Try direct YouTube extraction with android inner-tube client
+    try {
+      const meta = await executeMetadataExtraction(cleanTarget, [
+        '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs'
+      ]);
+      return {
+        title: meta.title,
+        url: meta.webpage_url || meta.url || cleanTarget,
+        duration: meta.duration_string || formatDuration(meta.duration),
+        uploader: meta.uploader || 'YouTube'
+      };
+    } catch (err) {
+      lastError = err;
+      console.warn(`[Music] Direct YouTube extraction blocked: ${err.message}`);
     }
 
-    // 2. Datacenter IP bypass: Retrieve title via official oEmbed API and stream audio seamlessly via SoundCloud
-    console.log('[Music] Direct YouTube extraction blocked by datacenter IP. Using resilient SoundCloud audio fallback...');
-    const oembedTitle = await getYoutubeTitleFromOembed(cleanTarget);
-    const searchQuery = oembedTitle ? `scsearch1:${oembedTitle}` : `scsearch1:${cleanTarget}`;
+    // 2. Datacenter IP bypass: Retrieve title via Noembed and stream audio via SoundCloud
+    console.log('[Music] Using resilient Noembed + SoundCloud fallback...');
+    const trackTitle = await getTrackTitle(cleanTarget);
+    const searchQuery = trackTitle ? `scsearch1:${trackTitle}` : `scsearch1:${cleanTarget}`;
 
     try {
       const scMeta = await executeMetadataExtraction(searchQuery);
@@ -190,7 +192,7 @@ export async function getTrackMetadata(target) {
       if (item && item.title) {
         console.log(`[Music] Successfully resolved audio stream via fallback: "${item.title}"`);
         return {
-          title: oembedTitle || item.title,
+          title: trackTitle || item.title,
           url: item.webpage_url || item.url,
           duration: item.duration_string || formatDuration(item.duration),
           uploader: item.uploader || 'SoundCloud'
@@ -298,71 +300,91 @@ class MusicQueue {
     }
   }
 
+  async startStreamProcess(streamUrl) {
+    const bin = getYtdlExecutable();
+    const cookiesPath = path.resolve(process.cwd(), 'cookies.txt');
+    const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
+
+    console.log(`[Music] Launching stream for: ${streamUrl} using ${bin}`);
+    const cp = spawn(bin, [
+      streamUrl,
+      '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs',
+      ...cookieArgs,
+      '-o', '-',
+      '-q',
+      '-f', 'bestaudio/best',
+      '--no-playlist',
+      '--no-warnings'
+    ], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    this.currentProcess = cp;
+
+    cp.on('error', err => {
+      console.warn('[Music] yt-dlp spawn error:', err.message);
+    });
+
+    if (cp.stderr) {
+      cp.stderr.on('data', data => {
+        const msg = data.toString();
+        if (msg.toLowerCase().includes('error')) {
+          console.warn('[Music yt-dlp stderr]:', msg.trim());
+        }
+      });
+    }
+
+    // Demux probe with a 15-second timeout to prevent indefinite hanging
+    const probePromise = demuxProbe(cp.stdout);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Audio stream demux probe timed out after 15s')), 15000)
+    );
+    const probe = await Promise.race([probePromise, timeoutPromise]);
+    console.log(`[Music] Demux probe resolved stream type: ${probe.type}`);
+
+    const resource = createAudioResource(probe.stream, {
+      inputType: probe.type,
+      inlineVolume: true
+    });
+
+    if (resource.volume) {
+      resource.volume.setVolume(this.volume);
+    }
+
+    resource.playStream.on('error', err => {
+      console.error('[Music AudioResource] Stream error:', err.message);
+    });
+
+    this.currentResource = resource;
+    this.player.play(resource);
+    this.isPlaying = true;
+  }
+
   async playStream(track) {
     this.cleanupProcess();
     this.currentTrack = track;
 
     try {
-      const bin = getYtdlExecutable();
-      const cleanUrl = sanitizeTrackUrl(track.url);
-      const cookiesPath = path.resolve(process.cwd(), 'cookies.txt');
-      const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
-
-      console.log(`[Music] Launching stream for: ${cleanUrl} using ${bin}`);
-      const cp = spawn(bin, [
-        cleanUrl,
-        '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs',
-        ...cookieArgs,
-        '-o', '-',
-        '-q',
-        '-f', 'bestaudio/best',
-        '--no-playlist',
-        '--no-warnings'
-      ], {
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
-      this.currentProcess = cp;
-
-      cp.on('error', err => {
-        console.warn('[Music] yt-dlp spawn error:', err.message);
-      });
-
-      if (cp.stderr) {
-        cp.stderr.on('data', data => {
-          const msg = data.toString();
-          if (msg.toLowerCase().includes('error')) {
-            console.warn('[Music yt-dlp stderr]:', msg.trim());
-          }
-        });
-      }
-
-      // Demux probe with a 15-second timeout to prevent indefinite hanging
-      const probePromise = demuxProbe(cp.stdout);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Audio stream demux probe timed out after 15s')), 15000)
-      );
-      const probe = await Promise.race([probePromise, timeoutPromise]);
-      console.log(`[Music] Demux probe resolved stream type: ${probe.type}`);
-
-      const resource = createAudioResource(probe.stream, {
-        inputType: probe.type,
-        inlineVolume: true
-      });
-
-      if (resource.volume) {
-        resource.volume.setVolume(this.volume);
-      }
-
-      resource.playStream.on('error', err => {
-        console.error('[Music AudioResource] Stream error:', err.message);
-      });
-
-      this.currentResource = resource;
-      this.player.play(resource);
-      this.isPlaying = true;
+      await this.startStreamProcess(track.url);
     } catch (err) {
-      console.error(`[Music] Failed to stream ${track.url}:`, err);
+      console.warn(`[Music] Playback failed for "${track.title}":`, err.message);
+
+      // If playback failed on a YouTube URL, try SoundCloud fallback stream immediately
+      if (/youtube\.com|youtu\.be/i.test(track.url)) {
+        console.log(`[Music] Attempting SoundCloud audio fallback for "${track.title}"...`);
+        try {
+          const scMeta = await executeMetadataExtraction(`scsearch1:${track.title}`);
+          const item = scMeta.entries && scMeta.entries.length > 0 ? scMeta.entries[0] : scMeta;
+          if (item && (item.webpage_url || item.url)) {
+            const scUrl = item.webpage_url || item.url;
+            console.log(`[Music] Found SoundCloud fallback: ${scUrl}`);
+            await this.startStreamProcess(scUrl);
+            return;
+          }
+        } catch (scErr) {
+          console.warn('[Music] SoundCloud stream fallback failed:', scErr.message);
+        }
+      }
       this.cleanupProcess();
       throw err;
     }
