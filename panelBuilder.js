@@ -516,7 +516,6 @@ const COMMAND_IDS = {
   giveaway: '1550314105728929852',
   application: '1550444074023260240',
   commands: '1550686186178216078',
-  command: '1550686186178216079',
   refont: '1550686186178216080'
 };
 
@@ -622,7 +621,6 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
       `### ${categoryTitles[3]}`,
       `> High-fidelity voice channel music playback and utility formatting tools.\n`,
       `• ${getCommandMention(client, 'commands')} • Display this interactive command directory`,
-      `• ${getCommandMention(client, 'command')} • Secondary slash command for directory`,
       `• ${getCommandMention(client, 'refont')} • Convert text into Mathematical Sans-Serif font\n`,
       `**Voice Channel Music Commands:**`,
       `> \`-join\` • Summon bot into your current voice channel`,

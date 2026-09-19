@@ -366,9 +366,6 @@ const commands = [
     .setName('commands')
     .setDescription('Display the official Orlando Roleplay interactive command directory'),
   new SlashCommandBuilder()
-    .setName('command')
-    .setDescription('Display the official Orlando Roleplay interactive command directory'),
-  new SlashCommandBuilder()
     .setName('refont')
     .setDescription('Convert text into custom Mathematical Sans-Serif font (𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍)')
     .addStringOption(opt =>

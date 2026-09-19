@@ -59,7 +59,8 @@ import {
   replayMusic,
   toggleMusicLoop,
   leaveVoice,
-  getMusicQueue
+  getMusicQueue,
+  initMusicEngine
 } from './musicManager.js';
 import { generateTranscript } from './transcript.js';
 import {
@@ -415,6 +416,7 @@ client.once(Events.ClientReady, async () => {
   await updateAllLivePanels(client);
   await updateAllSessionPanels(client);
   await ensureSessionOfflineState(client);
+  initMusicEngine();
 
   // Auto-refresh live session panels every 60 seconds
   setInterval(async () => {
@@ -1510,8 +1512,8 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
-      // /commands or /command
-      if (interaction.commandName === 'commands' || interaction.commandName === 'command') {
+      // /commands
+      if (interaction.commandName === 'commands') {
         const payload = buildCommandsDirectoryPayload(client, 0);
         return interaction.reply(payload);
       }

@@ -14,7 +14,27 @@ import ffmpegPath from 'ffmpeg-static';
 
 const isWin = process.platform === 'win32';
 const customYtdlPath = path.resolve(process.cwd(), 'bin', isWin ? 'yt-dlp.exe' : 'yt-dlp');
-const ytdl = fs.existsSync(customYtdlPath) ? youtubedl.create(customYtdlPath) : youtubedl;
+
+export function getYtdl() {
+  if (fs.existsSync(customYtdlPath)) {
+    if (!isWin) {
+      try { fs.chmodSync(customYtdlPath, 0o755); } catch {}
+    }
+    return youtubedl.create(customYtdlPath);
+  }
+  return youtubedl;
+}
+
+export function initMusicEngine() {
+  if (fs.existsSync(customYtdlPath) && !isWin) {
+    try {
+      fs.chmodSync(customYtdlPath, 0o755);
+      console.log(`[Music] Standalone yt-dlp binary ready at ${customYtdlPath}`);
+    } catch (err) {
+      console.warn('[Music] Chmod error:', err.message);
+    }
+  }
+}
 
 // Map storing active guild queues: guildId -> MusicQueue
 const guildQueues = new Map();
@@ -76,7 +96,8 @@ class MusicQueue {
     this.currentTrack = track;
 
     try {
-      const cp = ytdl.exec(track.url, {
+      const ytdlInstance = getYtdl();
+      const cp = ytdlInstance.exec(track.url, {
         output: '-',
         format: 'bestaudio/best',
         noWarnings: true,
@@ -248,7 +269,8 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
 
   let meta;
   try {
-    meta = await ytdl(target, {
+    const ytdlInstance = getYtdl();
+    meta = await ytdlInstance(target, {
       dumpSingleJson: true,
       noWarnings: true,
       defaultSearch: 'ytsearch',
