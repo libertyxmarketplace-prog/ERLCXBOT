@@ -593,38 +593,54 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
   if (safePage === 0) {
     pageContent = [
       `### Support Desk & Moderation`,
-      `${getCommandMention(client, 'ticket', 'panel', guildId)} ${getCommandMention(client, 'ticket', 'status', guildId)} ${getCommandMention(client, 'ticket', 'category', guildId)}`,
-      `${getCommandMention(client, 'ticket', 'close', guildId)} ${getCommandMention(client, 'ticket', 'claim', guildId)} ${getCommandMention(client, 'ticket', 'unclaim', guildId)}`,
-      `${getCommandMention(client, 'ticket', 'add', guildId)} ${getCommandMention(client, 'ticket', 'remove', guildId)} ${getCommandMention(client, 'ticket', 'rename', guildId)}`,
-      `${getCommandMention(client, 'purge', '', guildId)} ${getCommandMention(client, 'say', '', guildId)}\n`,
+      getCommandMention(client, 'ticket', 'panel', guildId),
+      getCommandMention(client, 'ticket', 'status', guildId),
+      getCommandMention(client, 'ticket', 'category', guildId),
+      getCommandMention(client, 'ticket', 'close', guildId),
+      getCommandMention(client, 'ticket', 'claim', guildId),
+      getCommandMention(client, 'ticket', 'unclaim', guildId),
+      getCommandMention(client, 'ticket', 'add', guildId),
+      getCommandMention(client, 'ticket', 'remove', guildId),
+      getCommandMention(client, 'ticket', 'rename', guildId),
+      getCommandMention(client, 'purge', '', guildId),
+      getCommandMention(client, 'say', '', guildId),
+      '',
       `**Prefix Shortcuts**`,
       `\`-close [reason]\`  \`-open\``
     ].join('\n');
   } else if (safePage === 1) {
     pageContent = [
       `### ER:LC Live Sessions`,
-      `${getCommandMention(client, 'session', 'startup', guildId)} ${getCommandMention(client, 'session', 'shutdown', guildId)}`,
-      `${getCommandMention(client, 'session', 'cancel', guildId)} ${getCommandMention(client, 'session', 'delay', guildId)}`,
-      `${getCommandMention(client, 'session', 'setcode', guildId)} ${getCommandMention(client, 'session', 'vote', guildId)}`,
-      `${getCommandMention(client, 'session', 'panel', guildId)} ${getCommandMention(client, 'session', 'post', guildId)}\n`,
+      getCommandMention(client, 'session', 'panel', guildId),
+      getCommandMention(client, 'session', 'vote', guildId),
+      getCommandMention(client, 'session', 'shutdown', guildId),
+      getCommandMention(client, 'session', 'info', guildId),
+      '',
       `**Prefix Shortcuts**`,
-      `\`-startup [code] [vc]\`  \`-shutdown\`  \`-cancel\`  \`-delay <time>\``
+      `\`-startup [code] [vc]\`  \`-shutdown\`  \`-cancel\`  \`-delay <time>\`  \`-setcode <code>\``
     ].join('\n');
   } else if (safePage === 2) {
     pageContent = [
       `### Giveaways & Applications`,
-      `${getCommandMention(client, 'giveaway', 'start', guildId)} ${getCommandMention(client, 'giveaway', 'end', guildId)} ${getCommandMention(client, 'giveaway', 'reroll', guildId)}`,
-      `${getCommandMention(client, 'application', 'panel', guildId)} ${getCommandMention(client, 'application', 'setreview', guildId)}\n`,
+      getCommandMention(client, 'giveaway', 'start', guildId),
+      getCommandMention(client, 'giveaway', 'end', guildId),
+      getCommandMention(client, 'giveaway', 'reroll', guildId),
+      getCommandMention(client, 'application', 'panel', guildId),
+      getCommandMention(client, 'application', 'setreview', guildId),
+      '',
       `**Prefix Shortcuts**`,
       `\`-gstart <time> <winners> <prize>\`  \`-gend\`  \`-greroll\``
     ].join('\n');
   } else if (safePage === 3) {
     pageContent = [
       `### Voice Music & Utilities`,
-      `${getCommandMention(client, 'commands', '', guildId)} ${getCommandMention(client, 'refont', '', guildId)}\n`,
+      getCommandMention(client, 'commands', '', guildId),
+      getCommandMention(client, 'refont', '', guildId),
+      '',
       `**Music Prefix Commands**`,
       `\`-join\`  \`-play <query>\`  \`-volume <1-100>\``,
-      `\`-pause\`  \`-unpause\` / \`-resume\`  \`-replay\`  \`-loop\`  \`-leave\`\n`,
+      `\`-pause\`  \`-unpause\` / \`-resume\`  \`-replay\`  \`-loop\`  \`-leave\``,
+      '',
       `**Font Styling**`,
       `\`-refont <text>\``
     ].join('\n');

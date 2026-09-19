@@ -946,8 +946,13 @@ client.on(Events.MessageCreate, async message => {
 
     // -commands or -help
     if (command === 'commands' || command === 'command' || command === 'help') {
+      await message.delete().catch(() => null);
       const payload = buildCommandsDirectoryPayload(client, 0, message.guild?.id);
-      return message.channel.send(payload);
+      const sentMsg = await message.channel.send(payload);
+      setTimeout(() => {
+        sentMsg.delete().catch(() => null);
+      }, 60000);
+      return sentMsg;
     }
 
     // -join
@@ -1515,7 +1520,11 @@ client.on(Events.InteractionCreate, async interaction => {
       // /commands
       if (interaction.commandName === 'commands') {
         const payload = buildCommandsDirectoryPayload(client, 0, interaction.guildId);
-        return interaction.reply(payload);
+        await interaction.reply(payload);
+        setTimeout(() => {
+          interaction.deleteReply().catch(() => null);
+        }, 60000);
+        return;
       }
 
       // /refont <text>
