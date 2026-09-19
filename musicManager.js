@@ -7,8 +7,14 @@ import {
   entersState,
   demuxProbe
 } from '@discordjs/voice';
+import fs from 'fs';
+import path from 'path';
 import youtubedl from 'youtube-dl-exec';
 import ffmpegPath from 'ffmpeg-static';
+
+const isWin = process.platform === 'win32';
+const customYtdlPath = path.resolve(process.cwd(), 'bin', isWin ? 'yt-dlp.exe' : 'yt-dlp');
+const ytdl = fs.existsSync(customYtdlPath) ? youtubedl.create(customYtdlPath) : youtubedl;
 
 // Map storing active guild queues: guildId -> MusicQueue
 const guildQueues = new Map();
@@ -70,7 +76,7 @@ class MusicQueue {
     this.currentTrack = track;
 
     try {
-      const cp = youtubedl.exec(track.url, {
+      const cp = ytdl.exec(track.url, {
         output: '-',
         format: 'bestaudio/best',
         noWarnings: true,
@@ -242,7 +248,7 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
 
   let meta;
   try {
-    meta = await youtubedl(target, {
+    meta = await ytdl(target, {
       dumpSingleJson: true,
       noWarnings: true,
       defaultSearch: 'ytsearch',
