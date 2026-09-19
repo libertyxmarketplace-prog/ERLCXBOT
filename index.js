@@ -946,7 +946,7 @@ client.on(Events.MessageCreate, async message => {
 
     // -commands or -help
     if (command === 'commands' || command === 'command' || command === 'help') {
-      const payload = buildCommandsDirectoryPayload(client, 0);
+      const payload = buildCommandsDirectoryPayload(client, 0, message.guild?.id);
       return message.channel.send(payload);
     }
 
@@ -1514,7 +1514,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // /commands
       if (interaction.commandName === 'commands') {
-        const payload = buildCommandsDirectoryPayload(client, 0);
+        const payload = buildCommandsDirectoryPayload(client, 0, interaction.guildId);
         return interaction.reply(payload);
       }
 
@@ -2327,14 +2327,14 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId.startsWith('cmd_page_prev_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_prev_', ''), 10) || 0;
         const newPage = Math.max(0, curPage - 1);
-        const payload = buildCommandsDirectoryPayload(client, newPage);
+        const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
         return interaction.update(payload);
       }
 
       if (interaction.customId.startsWith('cmd_page_next_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_next_', ''), 10) || 0;
         const newPage = Math.min(3, curPage + 1);
-        const payload = buildCommandsDirectoryPayload(client, newPage);
+        const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
         return interaction.update(payload);
       }
 

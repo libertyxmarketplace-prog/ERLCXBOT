@@ -505,38 +505,63 @@ export function toSansSerif(text) {
   });
 }
 
-// Real registered application command IDs for blue clickable pills
-const COMMAND_IDS = {
-  ticket: '1550289749351211018',
-  add: '1550289749351211019',
-  remove: '1550289749351211020',
-  session: '1550289749351211021',
-  purge: '1550292659447529532',
-  say: '1550301619864731788',
-  giveaway: '1550314105728929852',
-  application: '1550444074023260240',
-  commands: '1550686186178216078',
-  refont: '1550686186178216080'
+// Registered application command IDs by guild for authentic blue clickable slash command pills
+const GUILD_COMMAND_MAPS = {
+  // Guild 1: 1541210827967823955
+  '1541210827967823955': {
+    ticket: '1550289751058284544',
+    add: '1550289751058284545',
+    remove: '1550289751058284546',
+    session: '1550289751058284547',
+    purge: '1550292662727352423',
+    say: '1550301620980686849',
+    giveaway: '1550314106790350950',
+    application: '1550444075444998165',
+    commands: '1550686187792900147',
+    refont: '1550686187792900149'
+  },
+  // Guild 2: 1530147023754367006
+  '1530147023754367006': {
+    ticket: '1550289749351211018',
+    add: '1550289749351211019',
+    remove: '1550289749351211020',
+    session: '1550289749351211021',
+    purge: '1550292659447529532',
+    say: '1550301619864731788',
+    giveaway: '1550314105728929852',
+    application: '1550444074023260240',
+    commands: '1550686186178216078',
+    refont: '1550686186178216080'
+  }
 };
 
 /**
  * Resolves a clickable blue slash command mention string </name subcommand:id>.
  */
-export function getCommandMention(client, name, subcommand = '') {
-  let cmdId = COMMAND_IDS[name];
+export function getCommandMention(client, name, subcommand = '', guildId = null) {
+  let cmdId = null;
 
+  // 1. Direct guild lookup from known ID maps
+  if (guildId && GUILD_COMMAND_MAPS[guildId]) {
+    cmdId = GUILD_COMMAND_MAPS[guildId][name];
+  }
+
+  // 2. Client guild cache lookup
+  if (!cmdId && guildId && client?.guilds?.cache?.has(guildId)) {
+    const guild = client.guilds.cache.get(guildId);
+    const found = guild.commands?.cache?.find(c => c.name === name);
+    if (found) cmdId = found.id;
+  }
+
+  // 3. Client global application commands cache
   if (!cmdId && client?.application?.commands?.cache) {
     const found = client.application.commands.cache.find(c => c.name === name);
     if (found) cmdId = found.id;
   }
+
+  // 4. Fallback defaults (prioritizing 1541210827967823955)
   if (!cmdId) {
-    for (const g of (client?.guilds?.cache?.values() || [])) {
-      const gFound = g.commands?.cache?.find(c => c.name === name);
-      if (gFound) {
-        cmdId = gFound.id;
-        break;
-      }
-    }
+    cmdId = GUILD_COMMAND_MAPS['1541210827967823955']?.[name] || GUILD_COMMAND_MAPS['1530147023754367006']?.[name];
   }
 
   if (subcommand) {
@@ -546,10 +571,10 @@ export function getCommandMention(client, name, subcommand = '') {
 }
 
 /**
- * Builds the interactive Components V2 /commands directory with clickable blue slash command pills
- * and gray arrow pagination.
+ * Builds the remodeled /commands directory with clickable blue slash command pills,
+ * bottom banner image, and clean gray arrow pagination.
  */
-export function buildCommandsDirectoryPayload(client, page = 0) {
+export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) {
   const totalPages = 4;
   const safePage = Math.max(0, Math.min(totalPages - 1, page));
 
@@ -569,17 +594,17 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
     pageContent = [
       `### ${categoryTitles[0]}`,
       `> Complete command suite for support desk management, transcripts, and tickets.\n`,
-      `• ${getCommandMention(client, 'ticket', 'panel')} • Deploy the live auto-updating ticket panel`,
-      `• ${getCommandMention(client, 'ticket', 'status')} • Update operational status (\`online\`, \`busy\`, \`closed\`)`,
-      `• ${getCommandMention(client, 'ticket', 'category')} • Toggle individual categories on or off`,
-      `• ${getCommandMention(client, 'ticket', 'close')} • Archive ticket, dispatch HTML transcript, and log`,
-      `• ${getCommandMention(client, 'ticket', 'claim')} • Claim active ticket as assigned staff handler`,
-      `• ${getCommandMention(client, 'ticket', 'unclaim')} • Return ticket to public staff queue`,
-      `• ${getCommandMention(client, 'ticket', 'add')} • Grant a user access to the ticket channel`,
-      `• ${getCommandMention(client, 'ticket', 'remove')} • Revoke a user's ticket channel access`,
-      `• ${getCommandMention(client, 'ticket', 'rename')} • Rename current ticket channel`,
-      `• ${getCommandMention(client, 'purge')} • Bulk-delete messages in a channel`,
-      `• ${getCommandMention(client, 'say')} • Dispatch clean staff announcements\n`,
+      `• ${getCommandMention(client, 'ticket', 'panel', guildId)} • Deploy the live auto-updating ticket panel`,
+      `• ${getCommandMention(client, 'ticket', 'status', guildId)} • Update operational status (\`online\`, \`busy\`, \`closed\`)`,
+      `• ${getCommandMention(client, 'ticket', 'category', guildId)} • Toggle individual categories on or off`,
+      `• ${getCommandMention(client, 'ticket', 'close', guildId)} • Archive ticket, dispatch HTML transcript, and log`,
+      `• ${getCommandMention(client, 'ticket', 'claim', guildId)} • Claim active ticket as assigned staff handler`,
+      `• ${getCommandMention(client, 'ticket', 'unclaim', guildId)} • Return ticket to public staff queue`,
+      `• ${getCommandMention(client, 'ticket', 'add', guildId)} • Grant a user access to the ticket channel`,
+      `• ${getCommandMention(client, 'ticket', 'remove', guildId)} • Revoke a user's ticket channel access`,
+      `• ${getCommandMention(client, 'ticket', 'rename', guildId)} • Rename current ticket channel`,
+      `• ${getCommandMention(client, 'purge', '', guildId)} • Bulk-delete messages in a channel`,
+      `• ${getCommandMention(client, 'say', '', guildId)} • Dispatch clean staff announcements\n`,
       `**Quick Prefix Commands:**`,
       `> \`-close [reason]\` • Fast-close ticket with mandatory transcript`,
       `> \`-open\` • Reopen or unlock a closed ticket channel`
@@ -588,14 +613,14 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
     pageContent = [
       `### ${categoryTitles[1]}`,
       `> Real-time private server session announcements, polling, and voting.\n`,
-      `• ${getCommandMention(client, 'session', 'startup')} • Announce server session startup with join code & VC`,
-      `• ${getCommandMention(client, 'session', 'shutdown')} • Announce official session shutdown & closure`,
-      `• ${getCommandMention(client, 'session', 'cancel')} • Cancel pending session countdown with reason`,
-      `• ${getCommandMention(client, 'session', 'delay')} • Postpone session start time with custom countdown`,
-      `• ${getCommandMention(client, 'session', 'setcode')} • Update in-game ER:LC private server join code`,
-      `• ${getCommandMention(client, 'session', 'vote')} • Launch interactive community session quorum vote`,
-      `• ${getCommandMention(client, 'session', 'panel')} • Deploy live auto-updating server stats embed`,
-      `• ${getCommandMention(client, 'session', 'post')} • Dispatch raw session information banner\n`,
+      `• ${getCommandMention(client, 'session', 'startup', guildId)} • Announce server session startup with join code & VC`,
+      `• ${getCommandMention(client, 'session', 'shutdown', guildId)} • Announce official session shutdown & closure`,
+      `• ${getCommandMention(client, 'session', 'cancel', guildId)} • Cancel pending session countdown with reason`,
+      `• ${getCommandMention(client, 'session', 'delay', guildId)} • Postpone session start time with custom countdown`,
+      `• ${getCommandMention(client, 'session', 'setcode', guildId)} • Update in-game ER:LC private server join code`,
+      `• ${getCommandMention(client, 'session', 'vote', guildId)} • Launch interactive community session quorum vote`,
+      `• ${getCommandMention(client, 'session', 'panel', guildId)} • Deploy live auto-updating server stats embed`,
+      `• ${getCommandMention(client, 'session', 'post', guildId)} • Dispatch raw session information banner\n`,
       `**Quick Prefix Commands:**`,
       `> \`-startup [code] [vc]\` • Quick-start live patrol session`,
       `> \`-shutdown\` • Conclude session and log closure`,
@@ -606,11 +631,11 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
     pageContent = [
       `### ${categoryTitles[2]}`,
       `> Automated giveaways with DM notifications and full staff application evaluation.\n`,
-      `• ${getCommandMention(client, 'giveaway', 'start')} • Start a clean modern Components V2 giveaway`,
-      `• ${getCommandMention(client, 'giveaway', 'end')} • End giveaway, pick winners, and send winner DMs`,
-      `• ${getCommandMention(client, 'giveaway', 'reroll')} • Reroll new winner(s) with automated winner DMs\n`,
-      `• ${getCommandMention(client, 'application', 'panel')} • Deploy official staff application panel`,
-      `• ${getCommandMention(client, 'application', 'setreview')} • Set staff application evaluation channel\n`,
+      `• ${getCommandMention(client, 'giveaway', 'start', guildId)} • Start a clean modern giveaway`,
+      `• ${getCommandMention(client, 'giveaway', 'end', guildId)} • End giveaway, pick winners, and send winner DMs`,
+      `• ${getCommandMention(client, 'giveaway', 'reroll', guildId)} • Reroll new winner(s) with automated winner DMs\n`,
+      `• ${getCommandMention(client, 'application', 'panel', guildId)} • Deploy official staff application panel`,
+      `• ${getCommandMention(client, 'application', 'setreview', guildId)} • Set staff application evaluation channel\n`,
       `**Giveaway Prefix Commands:**`,
       `> \`-gstart <time> <winners> [@role] <prize>\` • Start giveaway`,
       `> \`-gend [id/keyword]\` • End giveaway immediately`,
@@ -620,8 +645,8 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
     pageContent = [
       `### ${categoryTitles[3]}`,
       `> High-fidelity voice channel music playback and utility formatting tools.\n`,
-      `• ${getCommandMention(client, 'commands')} • Display this interactive command directory`,
-      `• ${getCommandMention(client, 'refont')} • Convert text into Mathematical Sans-Serif font\n`,
+      `• ${getCommandMention(client, 'commands', '', guildId)} • Display this interactive command directory`,
+      `• ${getCommandMention(client, 'refont', '', guildId)} • Convert text into Mathematical Sans-Serif font\n`,
       `**Voice Channel Music Commands:**`,
       `> \`-join\` • Summon bot into your current voice channel`,
       `> \`-play <url or search query>\` • Stream YouTube / web audio`,
@@ -636,77 +661,46 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
     ].join('\n');
   }
 
-  const containerComponents = [
-    // 1. Directory Header (No top banner, clean and modern)
-    {
-      type: 10,
-      content:
-        `## Orlando Roleplay | System Commands Manual\n` +
-        `> **Section ${safePage + 1} of ${totalPages}** • **${categoryTitles[safePage]}**\n` +
-        `> Click any blue command mention below to trigger it directly in Discord!`
-    },
-    // 2. Page Content with Blue Mentions
-    {
-      type: 10,
-      content: pageContent
-    },
-    // 3. Blue Accent Banner Strip right before the arrow buttons
-    {
-      type: 12,
-      items: [
-        {
-          media: {
-            url: 'attachment://bottom-banner.png'
-          }
-        }
-      ]
-    },
-    // 4. Arrow Pagination Action Row
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          emoji: { id: leftEmojiId },
-          custom_id: `cmd_page_prev_${safePage}`,
-          disabled: safePage === 0
-        },
-        {
-          type: 2,
-          style: 2, // Secondary Gray Pill
-          label: `Page ${safePage + 1} of ${totalPages}`,
-          disabled: true,
-          custom_id: 'cmd_page_info'
-        },
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          emoji: { id: rightEmojiId },
-          custom_id: `cmd_page_next_${safePage}`,
-          disabled: safePage === totalPages - 1
-        }
-      ]
-    },
-    // 5. Micro Footer
-    {
-      type: 10,
-      content: `-# Orlando Roleplay Systems • Click any blue mention above to run`
-    }
-  ];
+  const embed = new EmbedBuilder()
+    .setColor(0x2B6CB0)
+    .setTitle('Orlando Roleplay — Command Directory')
+    .setDescription(
+      `> **Section ${safePage + 1} of ${totalPages}** • **${categoryTitles[safePage]}**\n` +
+      `> Click any blue command mention below to trigger it directly in Discord!\n\n` +
+      pageContent
+    )
+    .setFooter({
+      text: `Orlando Roleplay Systems • Page ${safePage + 1} of ${totalPages}`
+    });
 
-  const bannerFile = fs.existsSync('./assets/bottom-banner.png')
-    ? new AttachmentBuilder('./assets/bottom-banner.png', { name: 'bottom-banner.png' })
-    : null;
+  const bannerPath = './assets/bottom-banner.png';
+  let bannerFile = null;
+  if (fs.existsSync(bannerPath)) {
+    bannerFile = new AttachmentBuilder(bannerPath, { name: 'bottom-banner.png' });
+    embed.setImage('attachment://bottom-banner.png');
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`cmd_page_prev_${safePage}`)
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji(leftEmojiId)
+      .setDisabled(safePage === 0),
+    new ButtonBuilder()
+      .setCustomId('cmd_page_info')
+      .setStyle(ButtonStyle.Secondary)
+      .setLabel(`Page ${safePage + 1} of ${totalPages}`)
+      .setDisabled(true),
+    new ButtonBuilder()
+      .setCustomId(`cmd_page_next_${safePage}`)
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji(rightEmojiId)
+      .setDisabled(safePage === totalPages - 1)
+  );
 
   return {
-    flags: 32768, // IS_COMPONENTS_V2
-    components: [
-      {
-        type: 17, // Container
-        components: containerComponents
-      }
-    ],
+    embeds: [embed],
+    components: [row],
     files: bannerFile ? [bannerFile] : []
   };
 }
