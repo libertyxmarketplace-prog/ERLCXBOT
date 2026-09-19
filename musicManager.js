@@ -67,10 +67,7 @@ export function sanitizeTrackUrl(input) {
   }
 }
 
-/**
- * Extracts metadata for a track or query using native spawn to prevent memory leaks and stream hijacking.
- */
-export async function getTrackMetadata(target) {
+function executeMetadataExtraction(target, extraArgs) {
   return new Promise((resolve, reject) => {
     const bin = getYtdlExecutable();
     const cleanTarget = sanitizeTrackUrl(target);
@@ -78,7 +75,7 @@ export async function getTrackMetadata(target) {
     const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
 
     const args = [
-      '--extractor-args', 'youtube:player_client=android,web,tv_embedded',
+      ...extraArgs,
       ...cookieArgs,
       '--dump-single-json',
       '--no-playlist',
@@ -113,6 +110,31 @@ export async function getTrackMetadata(target) {
       }
     });
   });
+}
+
+/**
+ * Extracts metadata for a track or query using multi-tiered fallback to bypass datacenter bot detection.
+ */
+export async function getTrackMetadata(target) {
+  const strategies = [
+    // Primary: Android client skipping webpage HTML download (bypasses bot verification page)
+    ['--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs'],
+    // Secondary: Android + Mobile Web
+    ['--extractor-args', 'youtube:player_client=android,mweb'],
+    // Tertiary: Embedded TV client
+    ['--extractor-args', 'youtube:player_client=tv_embedded,android']
+  ];
+
+  let lastError = null;
+  for (const strategy of strategies) {
+    try {
+      return await executeMetadataExtraction(target, strategy);
+    } catch (err) {
+      lastError = err;
+      console.warn(`[Music] Strategy ${strategy.join(' ')} failed, falling back...:`, err.message);
+    }
+  }
+  throw lastError;
 }
 
 // Map storing active guild queues: guildId -> MusicQueue
@@ -192,7 +214,7 @@ class MusicQueue {
       console.log(`[Music] Launching stream for: ${cleanUrl} using ${bin}`);
       const cp = spawn(bin, [
         cleanUrl,
-        '--extractor-args', 'youtube:player_client=android,web,tv_embedded',
+        '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs',
         ...cookieArgs,
         '-o', '-',
         '-q',
