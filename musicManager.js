@@ -169,10 +169,10 @@ export async function getTrackMetadata(target) {
   let lastError = null;
 
   if (isYoutube) {
-    // 1. Try direct YouTube extraction with android inner-tube client
+    // 1. Try direct YouTube extraction with multi-client inner-tube fallback
     try {
       const meta = await executeMetadataExtraction(cleanTarget, [
-        '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs'
+        '--extractor-args', 'youtube:player_client=android,ios,mweb;player_skip=configs'
       ]);
       return {
         title: meta.title,
@@ -206,20 +206,24 @@ export async function getTrackMetadata(target) {
       console.warn('[Music] SoundCloud fallback extraction failed:', scErr.message);
     }
   } else {
-    // Non-YouTube URL or plain search query
+    // Search query or non-YouTube URL: try YouTube search first with android,ios,mweb
+    const searchTarget = isUrl ? cleanTarget : `ytsearch1:${cleanTarget}`;
     try {
-      const meta = await executeMetadataExtraction(cleanTarget);
+      const meta = await executeMetadataExtraction(searchTarget, [
+        '--extractor-args', 'youtube:player_client=android,ios,mweb;player_skip=configs'
+      ]);
       const item = meta.entries && meta.entries.length > 0 ? meta.entries[0] : meta;
       if (item && item.title) {
         return {
           title: item.title,
           url: item.webpage_url || item.url || cleanTarget,
           duration: item.duration_string || formatDuration(item.duration),
-          uploader: item.uploader || 'Unknown'
+          uploader: item.uploader || 'YouTube'
         };
       }
     } catch (err) {
       lastError = err;
+      console.warn(`[Music] YouTube search failed for "${cleanTarget}":`, err.message);
       try {
         const scMeta = await executeMetadataExtraction(`scsearch1:${cleanTarget}`);
         const item = scMeta.entries && scMeta.entries.length > 0 ? scMeta.entries[0] : scMeta;
@@ -314,7 +318,7 @@ class MusicQueue {
     console.log(`[Music] Launching stream for: ${streamUrl} using ${bin}`);
     const cp = spawn(bin, [
       streamUrl,
-      '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs',
+      '--extractor-args', 'youtube:player_client=android,ios,mweb;player_skip=configs',
       ...cookieArgs,
       ...ffmpegArgs,
       '-o', '-',
@@ -409,6 +413,8 @@ class MusicQueue {
         }
       }
       this.cleanupProcess();
+      this.currentTrack = null;
+      this.isPlaying = false;
       throw err;
     }
   }
@@ -516,6 +522,7 @@ export async function joinVoice(voiceChannel, textChannel) {
     connection.state.status === VoiceConnectionStatus.Disconnected;
 
   if (isDead) {
+    try { if (connection) connection.destroy(); } catch {}
     connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: voiceChannel.guild.id,
@@ -544,17 +551,35 @@ export async function joinVoice(voiceChannel, textChannel) {
     connection.on('error', err => {
       console.warn('[VoiceConnection] error:', err.message);
     });
-  } else if (connection.joinConfig?.channelId !== voiceChannel.id) {
-    connection.rejoin({
-      channelId: voiceChannel.id,
-      selfDeaf: true
-    });
+  } else {
+    if (connection.joinConfig?.channelId !== voiceChannel.id) {
+      connection.rejoin({
+        channelId: voiceChannel.id,
+        selfDeaf: true
+      });
+    }
+    // Always guarantee player is actively subscribed to the voice connection
+    if (!queue.subscription || queue.subscription.connection !== connection) {
+      queue.subscription = connection.subscribe(queue.player);
+    }
   }
 
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+    if (connection.state.status !== VoiceConnectionStatus.Ready) {
+      await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    }
   } catch (err) {
-    console.warn('[VoiceConnection] Connection did not reach Ready state in 20s:', err.message);
+    console.warn('[VoiceConnection] Connection not ready, auto-recovering:', err.message);
+    try { connection.destroy(); } catch {}
+    connection = joinVoiceChannel({
+      channelId: voiceChannel.id,
+      guildId: voiceChannel.guild.id,
+      adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      selfDeaf: true
+    });
+    queue.connection = connection;
+    queue.subscription = connection.subscribe(queue.player);
+    await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
   }
 
   return queue;
@@ -589,9 +614,17 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
     requesterId: member.id
   };
 
-  if (!queue.isPlaying && !queue.currentTrack) {
-    await queue.playStream(trackInfo);
-    return { status: 'playing', track: trackInfo };
+  const isCurrentlyPlaying = queue.isPlaying && queue.player.state.status === AudioPlayerStatus.Playing;
+
+  if (!isCurrentlyPlaying) {
+    try {
+      await queue.playStream(trackInfo);
+      return { status: 'playing', track: trackInfo };
+    } catch (err) {
+      queue.currentTrack = null;
+      queue.isPlaying = false;
+      throw err;
+    }
   } else {
     queue.tracks.push(trackInfo);
     return { status: 'queued', track: trackInfo, position: queue.tracks.length };
