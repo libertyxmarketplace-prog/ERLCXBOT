@@ -12,6 +12,11 @@ import path from 'path';
 import youtubedl from 'youtube-dl-exec';
 import ffmpegPath from 'ffmpeg-static';
 
+// Ensure prism-media and internal FFmpeg spawns immediately locate the bundled static binary
+if (ffmpegPath) {
+  process.env.FFMPEG_PATH = ffmpegPath;
+}
+
 const isWin = process.platform === 'win32';
 const customYtdlPath = path.resolve(process.cwd(), 'bin', isWin ? 'yt-dlp.exe' : 'yt-dlp');
 
@@ -36,6 +41,31 @@ export function initMusicEngine() {
   }
 }
 
+/**
+ * Sanitizes YouTube links to isolate the single video ID and strip playlist / radio / mix parameters.
+ * E.g.: https://www.youtube.com/watch?v=XYZ&list=RD... -> https://www.youtube.com/watch?v=XYZ
+ */
+export function sanitizeTrackUrl(input) {
+  if (!input || typeof input !== 'string') return '';
+  const trimmed = input.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.includes('youtube.com') && parsed.searchParams.has('v')) {
+      const v = parsed.searchParams.get('v');
+      return `https://www.youtube.com/watch?v=${v}`;
+    }
+    if (parsed.hostname.includes('youtu.be')) {
+      const id = parsed.pathname.replace(/^\//, '').split('/')[0];
+      if (id) {
+        return `https://www.youtube.com/watch?v=${id}`;
+      }
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
 // Map storing active guild queues: guildId -> MusicQueue
 const guildQueues = new Map();
 
@@ -50,7 +80,7 @@ class MusicQueue {
     this.currentTrack = null;
     this.currentResource = null;
     this.currentProcess = null;
-    this.volume = 1.0; // 0.0 to 2.0 (1.0 = 100%)
+    this.volume = 1.0; // 0.0 to 1.0 (1.0 = 100%)
     this.isLooping = false;
     this.isPlaying = false;
 
@@ -64,7 +94,7 @@ class MusicQueue {
       if (this.isLooping && this.currentTrack) {
         // Replay current track on loop
         this.playStream(this.currentTrack).catch(err => {
-          console.error('Error looping track:', err);
+          console.error('[Music] Error looping track:', err);
           this.playNext();
         });
       } else {
@@ -73,7 +103,7 @@ class MusicQueue {
     });
 
     this.player.on('error', err => {
-      console.error('Audio Player Error:', err.message);
+      console.error('[Music] Audio Player Error:', err.message);
       this.cleanupProcess();
       if (this.textChannel) {
         this.textChannel.send(`⚠️ Audio playback error: ${err.message}`).catch(() => null);
@@ -85,7 +115,7 @@ class MusicQueue {
   cleanupProcess() {
     if (this.currentProcess) {
       try {
-        this.currentProcess.kill();
+        this.currentProcess.kill('SIGKILL');
       } catch {}
       this.currentProcess = null;
     }
@@ -97,10 +127,13 @@ class MusicQueue {
 
     try {
       const ytdlInstance = getYtdl();
-      const cp = ytdlInstance.exec(track.url, {
+      const cleanUrl = sanitizeTrackUrl(track.url);
+
+      const cp = ytdlInstance.exec(cleanUrl, {
         output: '-',
         format: 'bestaudio/best',
         noWarnings: true,
+        noPlaylist: true,
         preferFreeFormats: true,
         ffmpegLocation: ffmpegPath
       });
@@ -108,10 +141,24 @@ class MusicQueue {
       this.currentProcess = cp;
 
       cp.on('error', err => {
-        console.warn('yt-dlp child process error:', err.message);
+        console.warn('[Music] yt-dlp child process error:', err.message);
       });
 
-      const probe = await demuxProbe(cp.stdout);
+      if (cp.stderr) {
+        cp.stderr.on('data', data => {
+          const msg = data.toString();
+          if (msg.toLowerCase().includes('error')) {
+            console.warn('[Music yt-dlp stderr]:', msg.trim());
+          }
+        });
+      }
+
+      // Demux probe with a 15-second timeout to prevent indefinite hanging
+      const probePromise = demuxProbe(cp.stdout);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Audio stream demux probe timed out after 15s')), 15000)
+      );
+      const probe = await Promise.race([probePromise, timeoutPromise]);
 
       const resource = createAudioResource(probe.stream, {
         inputType: probe.type,
@@ -122,11 +169,15 @@ class MusicQueue {
         resource.volume.setVolume(this.volume);
       }
 
+      resource.playStream.on('error', err => {
+        console.error('[Music AudioResource] Stream error:', err.message);
+      });
+
       this.currentResource = resource;
       this.player.play(resource);
       this.isPlaying = true;
     } catch (err) {
-      console.error(`Failed to stream ${track.url}:`, err);
+      console.error(`[Music] Failed to stream ${track.url}:`, err);
       this.cleanupProcess();
       throw err;
     }
@@ -215,7 +266,7 @@ class MusicQueue {
 }
 
 /**
- * Connects the bot to the specified voice channel.
+ * Connects the bot to the specified voice channel and awaits the Ready state.
  */
 export async function joinVoice(voiceChannel, textChannel) {
   if (!voiceChannel) throw new Error('Voice channel required.');
@@ -229,26 +280,48 @@ export async function joinVoice(voiceChannel, textChannel) {
     if (textChannel) queue.textChannel = textChannel;
   }
 
-  const connection = joinVoiceChannel({
-    channelId: voiceChannel.id,
-    guildId: voiceChannel.guild.id,
-    adapterCreator: voiceChannel.guild.voiceAdapterCreator,
-    selfDeaf: true
-  });
+  let connection = queue.connection;
+  const isDead = !connection ||
+    connection.state.status === VoiceConnectionStatus.Destroyed ||
+    connection.state.status === VoiceConnectionStatus.Disconnected;
 
-  queue.connection = connection;
-  connection.subscribe(queue.player);
+  if (isDead) {
+    connection = joinVoiceChannel({
+      channelId: voiceChannel.id,
+      guildId: voiceChannel.guild.id,
+      adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      selfDeaf: true
+    });
 
-  connection.on(VoiceConnectionStatus.Disconnected, async () => {
-    try {
-      await Promise.race([
-        entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-        entersState(connection, VoiceConnectionStatus.Connecting, 5_000)
-      ]);
-    } catch {
-      queue.destroy();
-    }
-  });
+    queue.connection = connection;
+    connection.subscribe(queue.player);
+
+    connection.on(VoiceConnectionStatus.Disconnected, async () => {
+      try {
+        await Promise.race([
+          entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+          entersState(connection, VoiceConnectionStatus.Connecting, 5_000)
+        ]);
+      } catch {
+        queue.destroy();
+      }
+    });
+
+    connection.on('error', err => {
+      console.warn('[VoiceConnection] error:', err.message);
+    });
+  } else if (connection.joinConfig?.channelId !== voiceChannel.id) {
+    connection.rejoin({
+      channelId: voiceChannel.id,
+      selfDeaf: true
+    });
+  }
+
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+  } catch (err) {
+    console.warn('[VoiceConnection] Connection did not reach Ready state in 20s:', err.message);
+  }
 
   return queue;
 }
@@ -265,7 +338,7 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
 
   const cleanQuery = query.trim();
   const isUrl = /^https?:\/\//i.test(cleanQuery);
-  const target = isUrl ? cleanQuery : `ytsearch1:${cleanQuery}`;
+  const target = isUrl ? sanitizeTrackUrl(cleanQuery) : `ytsearch1:${cleanQuery}`;
 
   let meta;
   try {
@@ -273,6 +346,7 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
     meta = await ytdlInstance(target, {
       dumpSingleJson: true,
       noWarnings: true,
+      noPlaylist: true,
       defaultSearch: 'ytsearch',
       ffmpegLocation: ffmpegPath
     });
@@ -296,9 +370,13 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
     durationStr = item.duration_string;
   }
 
+  const cleanUrl = sanitizeTrackUrl(
+    item.webpage_url || item.url || (item.id ? `https://www.youtube.com/watch?v=${item.id}` : cleanQuery)
+  );
+
   const trackInfo = {
     title: item.title,
-    url: item.webpage_url || item.url || cleanQuery,
+    url: cleanUrl,
     duration: durationStr,
     requesterId: member.id
   };
@@ -373,3 +451,4 @@ export function leaveVoice(guildId) {
 export function getMusicQueue(guildId) {
   return guildQueues.get(guildId) || null;
 }
+
