@@ -592,72 +592,41 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
 
   if (safePage === 0) {
     pageContent = [
-      `### ${categoryTitles[0]}`,
-      `> Complete command suite for support desk management, transcripts, and tickets.\n`,
-      `• ${getCommandMention(client, 'ticket', 'panel', guildId)} • Deploy the live auto-updating ticket panel`,
-      `• ${getCommandMention(client, 'ticket', 'status', guildId)} • Update operational status (\`online\`, \`busy\`, \`closed\`)`,
-      `• ${getCommandMention(client, 'ticket', 'category', guildId)} • Toggle individual categories on or off`,
-      `• ${getCommandMention(client, 'ticket', 'close', guildId)} • Archive ticket, dispatch HTML transcript, and log`,
-      `• ${getCommandMention(client, 'ticket', 'claim', guildId)} • Claim active ticket as assigned staff handler`,
-      `• ${getCommandMention(client, 'ticket', 'unclaim', guildId)} • Return ticket to public staff queue`,
-      `• ${getCommandMention(client, 'ticket', 'add', guildId)} • Grant a user access to the ticket channel`,
-      `• ${getCommandMention(client, 'ticket', 'remove', guildId)} • Revoke a user's ticket channel access`,
-      `• ${getCommandMention(client, 'ticket', 'rename', guildId)} • Rename current ticket channel`,
-      `• ${getCommandMention(client, 'purge', '', guildId)} • Bulk-delete messages in a channel`,
-      `• ${getCommandMention(client, 'say', '', guildId)} • Dispatch clean staff announcements\n`,
-      `**Quick Prefix Commands:**`,
-      `> \`-close [reason]\` • Fast-close ticket with mandatory transcript`,
-      `> \`-open\` • Reopen or unlock a closed ticket channel`
+      `### Support Desk & Moderation`,
+      `${getCommandMention(client, 'ticket', 'panel', guildId)} ${getCommandMention(client, 'ticket', 'status', guildId)} ${getCommandMention(client, 'ticket', 'category', guildId)}`,
+      `${getCommandMention(client, 'ticket', 'close', guildId)} ${getCommandMention(client, 'ticket', 'claim', guildId)} ${getCommandMention(client, 'ticket', 'unclaim', guildId)}`,
+      `${getCommandMention(client, 'ticket', 'add', guildId)} ${getCommandMention(client, 'ticket', 'remove', guildId)} ${getCommandMention(client, 'ticket', 'rename', guildId)}`,
+      `${getCommandMention(client, 'purge', '', guildId)} ${getCommandMention(client, 'say', '', guildId)}\n`,
+      `**Prefix Shortcuts**`,
+      `\`-close [reason]\`  \`-open\``
     ].join('\n');
   } else if (safePage === 1) {
     pageContent = [
-      `### ${categoryTitles[1]}`,
-      `> Real-time private server session announcements, polling, and voting.\n`,
-      `• ${getCommandMention(client, 'session', 'startup', guildId)} • Announce server session startup with join code & VC`,
-      `• ${getCommandMention(client, 'session', 'shutdown', guildId)} • Announce official session shutdown & closure`,
-      `• ${getCommandMention(client, 'session', 'cancel', guildId)} • Cancel pending session countdown with reason`,
-      `• ${getCommandMention(client, 'session', 'delay', guildId)} • Postpone session start time with custom countdown`,
-      `• ${getCommandMention(client, 'session', 'setcode', guildId)} • Update in-game ER:LC private server join code`,
-      `• ${getCommandMention(client, 'session', 'vote', guildId)} • Launch interactive community session quorum vote`,
-      `• ${getCommandMention(client, 'session', 'panel', guildId)} • Deploy live auto-updating server stats embed`,
-      `• ${getCommandMention(client, 'session', 'post', guildId)} • Dispatch raw session information banner\n`,
-      `**Quick Prefix Commands:**`,
-      `> \`-startup [code] [vc]\` • Quick-start live patrol session`,
-      `> \`-shutdown\` • Conclude session and log closure`,
-      `> \`-cancel [reason]\` • Cancel active session countdown`,
-      `> \`-delay <duration>\` • Postpone session startup`
+      `### ER:LC Live Sessions`,
+      `${getCommandMention(client, 'session', 'startup', guildId)} ${getCommandMention(client, 'session', 'shutdown', guildId)}`,
+      `${getCommandMention(client, 'session', 'cancel', guildId)} ${getCommandMention(client, 'session', 'delay', guildId)}`,
+      `${getCommandMention(client, 'session', 'setcode', guildId)} ${getCommandMention(client, 'session', 'vote', guildId)}`,
+      `${getCommandMention(client, 'session', 'panel', guildId)} ${getCommandMention(client, 'session', 'post', guildId)}\n`,
+      `**Prefix Shortcuts**`,
+      `\`-startup [code] [vc]\`  \`-shutdown\`  \`-cancel\`  \`-delay <time>\``
     ].join('\n');
   } else if (safePage === 2) {
     pageContent = [
-      `### ${categoryTitles[2]}`,
-      `> Automated giveaways with DM notifications and full staff application evaluation.\n`,
-      `• ${getCommandMention(client, 'giveaway', 'start', guildId)} • Start a clean modern giveaway`,
-      `• ${getCommandMention(client, 'giveaway', 'end', guildId)} • End giveaway, pick winners, and send winner DMs`,
-      `• ${getCommandMention(client, 'giveaway', 'reroll', guildId)} • Reroll new winner(s) with automated winner DMs\n`,
-      `• ${getCommandMention(client, 'application', 'panel', guildId)} • Deploy official staff application panel`,
-      `• ${getCommandMention(client, 'application', 'setreview', guildId)} • Set staff application evaluation channel\n`,
-      `**Giveaway Prefix Commands:**`,
-      `> \`-gstart <time> <winners> [@role] <prize>\` • Start giveaway`,
-      `> \`-gend [id/keyword]\` • End giveaway immediately`,
-      `> \`-greroll [id/keyword]\` • Reroll giveaway winner`
+      `### Giveaways & Applications`,
+      `${getCommandMention(client, 'giveaway', 'start', guildId)} ${getCommandMention(client, 'giveaway', 'end', guildId)} ${getCommandMention(client, 'giveaway', 'reroll', guildId)}`,
+      `${getCommandMention(client, 'application', 'panel', guildId)} ${getCommandMention(client, 'application', 'setreview', guildId)}\n`,
+      `**Prefix Shortcuts**`,
+      `\`-gstart <time> <winners> <prize>\`  \`-gend\`  \`-greroll\``
     ].join('\n');
   } else if (safePage === 3) {
     pageContent = [
-      `### ${categoryTitles[3]}`,
-      `> High-fidelity voice channel music playback and utility formatting tools.\n`,
-      `• ${getCommandMention(client, 'commands', '', guildId)} • Display this interactive command directory`,
-      `• ${getCommandMention(client, 'refont', '', guildId)} • Convert text into Mathematical Sans-Serif font\n`,
-      `**Voice Channel Music Commands:**`,
-      `> \`-join\` • Summon bot into your current voice channel`,
-      `> \`-play <url or search query>\` • Stream YouTube / web audio`,
-      `> \`-volume <1-100>\` • Adjust audio playback volume level`,
-      `> \`-pause\` • Pause current playing track`,
-      `> \`-resume\` • Resume paused track`,
-      `> \`-replay\` • Restart current playing song from start`,
-      `> \`-loop\` • Toggle loop mode for the current track`,
-      `> \`-leave\` • Stop music and disconnect from voice\n`,
-      `**Font Formatting Prefix:**`,
-      `> \`-refont <text>\` • Automatically outputs in \`𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍\``
+      `### Voice Music & Utilities`,
+      `${getCommandMention(client, 'commands', '', guildId)} ${getCommandMention(client, 'refont', '', guildId)}\n`,
+      `**Music Prefix Commands**`,
+      `\`-join\`  \`-play <query>\`  \`-volume <1-100>\``,
+      `\`-pause\`  \`-unpause\` / \`-resume\`  \`-replay\`  \`-loop\`  \`-leave\`\n`,
+      `**Font Styling**`,
+      `\`-refont <text>\``
     ].join('\n');
   }
 
@@ -665,12 +634,12 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
     .setColor(0x2B6CB0)
     .setTitle('Orlando Roleplay — Command Directory')
     .setDescription(
-      `> **Section ${safePage + 1} of ${totalPages}** • **${categoryTitles[safePage]}**\n` +
-      `> Click any blue command mention below to trigger it directly in Discord!\n\n` +
+      `> **Section ${safePage + 1} of ${totalPages}** | **${categoryTitles[safePage]}**\n` +
+      `> Click any command tag below to execute directly in Discord.\n\n` +
       pageContent
     )
     .setFooter({
-      text: `Orlando Roleplay Systems • Page ${safePage + 1} of ${totalPages}`
+      text: `Orlando Roleplay Systems | Page ${safePage + 1} of ${totalPages}`
     });
 
   const bannerPath = './assets/bottom-banner.png';

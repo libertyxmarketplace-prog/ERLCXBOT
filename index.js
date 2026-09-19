@@ -1014,8 +1014,8 @@ client.on(Events.MessageCreate, async message => {
       }
     }
 
-    // -resume
-    if (command === 'resume') {
+    // -resume / -unpause
+    if (command === 'resume' || command === 'unpause') {
       try {
         const ok = resumeMusic(message.guild.id);
         if (ok) {

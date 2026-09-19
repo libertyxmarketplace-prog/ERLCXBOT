@@ -13,9 +13,13 @@ import path from 'path';
 import { spawn } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 
-// Ensure prism-media and internal FFmpeg spawns immediately locate the bundled static binary
+// Ensure prism-media, internal FFmpeg, and yt-dlp spawns immediately locate the bundled static binary
 if (ffmpegPath) {
   process.env.FFMPEG_PATH = ffmpegPath;
+  const ffmpegDir = path.dirname(ffmpegPath);
+  if (!process.env.PATH?.includes(ffmpegDir)) {
+    process.env.PATH = `${ffmpegDir}${path.delimiter}${process.env.PATH || ''}`;
+  }
 }
 
 const isWin = process.platform === 'win32';
@@ -248,7 +252,8 @@ class MusicQueue {
     this.subscription = null;
     this.player = createAudioPlayer({
       behaviors: {
-        noSubscriber: NoSubscriberBehavior.Play
+        noSubscriber: NoSubscriberBehavior.Play,
+        maxMissedFrames: 500
       }
     });
     this.tracks = [];
@@ -304,17 +309,25 @@ class MusicQueue {
     const bin = getYtdlExecutable();
     const cookiesPath = path.resolve(process.cwd(), 'cookies.txt');
     const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
+    const ffmpegArgs = ffmpegPath ? ['--ffmpeg-location', ffmpegPath] : [];
 
     console.log(`[Music] Launching stream for: ${streamUrl} using ${bin}`);
     const cp = spawn(bin, [
       streamUrl,
       '--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs',
       ...cookieArgs,
+      ...ffmpegArgs,
       '-o', '-',
       '-q',
       '-f', 'bestaudio/best',
       '--no-playlist',
-      '--no-warnings'
+      '--no-warnings',
+      '--no-part',
+      '--no-cache-dir',
+      '--socket-timeout', '30',
+      '--retries', '10',
+      '--fragment-retries', '10',
+      '--file-access-retries', '5'
     ], {
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -323,6 +336,10 @@ class MusicQueue {
 
     cp.on('error', err => {
       console.warn('[Music] yt-dlp spawn error:', err.message);
+    });
+
+    cp.on('close', (code, signal) => {
+      console.log(`[Music yt-dlp] Stream child process exited (code ${code}, signal ${signal})`);
     });
 
     if (cp.stderr) {
@@ -342,9 +359,15 @@ class MusicQueue {
     const probe = await Promise.race([probePromise, timeoutPromise]);
     console.log(`[Music] Demux probe resolved stream type: ${probe.type}`);
 
+    // Ensure probed stream is resumed and not left in paused mode
+    if (probe.stream.isPaused()) {
+      probe.stream.resume();
+    }
+
     const resource = createAudioResource(probe.stream, {
       inputType: probe.type,
-      inlineVolume: true
+      inlineVolume: true,
+      silencePaddingFrames: 10
     });
 
     if (resource.volume) {
