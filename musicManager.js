@@ -32,6 +32,16 @@ export function getYtdlExecutable() {
 }
 
 export function initMusicEngine() {
+  if (process.env.YOUTUBE_COOKIES) {
+    try {
+      const cookieFile = path.resolve(process.cwd(), 'cookies.txt');
+      fs.writeFileSync(cookieFile, process.env.YOUTUBE_COOKIES);
+      console.log('[Music] Successfully created cookies.txt from YOUTUBE_COOKIES environment variable');
+    } catch (err) {
+      console.warn('[Music] Error writing YOUTUBE_COOKIES:', err.message);
+    }
+  }
+
   if (fs.existsSync(customYtdlPath) && !isWin) {
     try {
       fs.chmodSync(customYtdlPath, 0o755);
@@ -67,10 +77,34 @@ export function sanitizeTrackUrl(input) {
   }
 }
 
-function executeMetadataExtraction(target, extraArgs) {
+function formatDuration(sec) {
+  if (!sec || typeof sec !== 'number') return 'Unknown';
+  const mins = Math.floor(sec / 60);
+  const secs = Math.floor(sec % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
+/**
+ * Fetches YouTube video title using Google's official public oEmbed API.
+ * This endpoint never blocks cloud / datacenter IPs.
+ */
+export async function getYoutubeTitleFromOembed(url) {
+  try {
+    const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const res = await fetch(endpoint);
+    if (res.ok) {
+      const data = await res.json();
+      return data.title || null;
+    }
+  } catch (err) {
+    console.warn('[Music] oEmbed lookup failed:', err.message);
+  }
+  return null;
+}
+
+function executeMetadataExtraction(target, extraArgs = []) {
   return new Promise((resolve, reject) => {
     const bin = getYtdlExecutable();
-    const cleanTarget = sanitizeTrackUrl(target);
     const cookiesPath = path.resolve(process.cwd(), 'cookies.txt');
     const cookieArgs = fs.existsSync(cookiesPath) ? ['--cookies', cookiesPath] : [];
 
@@ -81,7 +115,7 @@ function executeMetadataExtraction(target, extraArgs) {
       '--no-playlist',
       '--no-warnings',
       '--default-search', 'ytsearch',
-      cleanTarget
+      target
     ];
     const cp = spawn(bin, args);
     let stdout = '';
@@ -116,25 +150,88 @@ function executeMetadataExtraction(target, extraArgs) {
  * Extracts metadata for a track or query using multi-tiered fallback to bypass datacenter bot detection.
  */
 export async function getTrackMetadata(target) {
-  const strategies = [
-    // Primary: Android client skipping webpage HTML download (bypasses bot verification page)
+  const isUrl = /^https?:\/\//i.test(target);
+  const cleanTarget = isUrl ? sanitizeTrackUrl(target) : target;
+  const isYoutube = /youtube\.com|youtu\.be/i.test(cleanTarget);
+
+  const youtubeStrategies = [
     ['--extractor-args', 'youtube:player_client=android;player_skip=webpage,configs'],
-    // Secondary: Android + Mobile Web
     ['--extractor-args', 'youtube:player_client=android,mweb'],
-    // Tertiary: Embedded TV client
     ['--extractor-args', 'youtube:player_client=tv_embedded,android']
   ];
 
   let lastError = null;
-  for (const strategy of strategies) {
+
+  if (isYoutube) {
+    // 1. Try direct YouTube extraction
+    for (const strategy of youtubeStrategies) {
+      try {
+        const meta = await executeMetadataExtraction(cleanTarget, strategy);
+        return {
+          title: meta.title,
+          url: meta.webpage_url || meta.url || cleanTarget,
+          duration: meta.duration_string || formatDuration(meta.duration),
+          uploader: meta.uploader || 'YouTube'
+        };
+      } catch (err) {
+        lastError = err;
+        console.warn(`[Music] YouTube strategy failed (${strategy.join(' ')}):`, err.message);
+      }
+    }
+
+    // 2. Datacenter IP bypass: Retrieve title via official oEmbed API and stream audio seamlessly via SoundCloud
+    console.log('[Music] Direct YouTube extraction blocked by datacenter IP. Using resilient SoundCloud audio fallback...');
+    const oembedTitle = await getYoutubeTitleFromOembed(cleanTarget);
+    const searchQuery = oembedTitle ? `scsearch1:${oembedTitle}` : `scsearch1:${cleanTarget}`;
+
     try {
-      return await executeMetadataExtraction(target, strategy);
+      const scMeta = await executeMetadataExtraction(searchQuery);
+      const item = scMeta.entries && scMeta.entries.length > 0 ? scMeta.entries[0] : scMeta;
+      if (item && item.title) {
+        console.log(`[Music] Successfully resolved audio stream via fallback: "${item.title}"`);
+        return {
+          title: oembedTitle || item.title,
+          url: item.webpage_url || item.url,
+          duration: item.duration_string || formatDuration(item.duration),
+          uploader: item.uploader || 'SoundCloud'
+        };
+      }
+    } catch (scErr) {
+      console.warn('[Music] SoundCloud fallback extraction failed:', scErr.message);
+    }
+  } else {
+    // Non-YouTube URL or plain search query
+    try {
+      const meta = await executeMetadataExtraction(cleanTarget);
+      const item = meta.entries && meta.entries.length > 0 ? meta.entries[0] : meta;
+      if (item && item.title) {
+        return {
+          title: item.title,
+          url: item.webpage_url || item.url || cleanTarget,
+          duration: item.duration_string || formatDuration(item.duration),
+          uploader: item.uploader || 'Unknown'
+        };
+      }
     } catch (err) {
       lastError = err;
-      console.warn(`[Music] Strategy ${strategy.join(' ')} failed, falling back...:`, err.message);
+      try {
+        const scMeta = await executeMetadataExtraction(`scsearch1:${cleanTarget}`);
+        const item = scMeta.entries && scMeta.entries.length > 0 ? scMeta.entries[0] : scMeta;
+        if (item && item.title) {
+          return {
+            title: item.title,
+            url: item.webpage_url || item.url,
+            duration: item.duration_string || formatDuration(item.duration),
+            uploader: item.uploader || 'SoundCloud'
+          };
+        }
+      } catch (scErr) {
+        // Fall back to lastError
+      }
     }
   }
-  throw lastError;
+
+  throw lastError || new Error(`No tracks found for "${target}".`);
 }
 
 // Map storing active guild queues: guildId -> MusicQueue
@@ -440,29 +537,10 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
     throw new Error(`Could not load track: ${err.message?.slice(0, 100) || 'Unknown error'}`);
   }
 
-  const item = meta.entries && meta.entries.length > 0 ? meta.entries[0] : meta;
-  if (!item || !item.title) {
-    throw new Error(`No tracks found for "${cleanQuery}".`);
-  }
-
-  const durationSec = item.duration;
-  let durationStr = 'Unknown';
-  if (durationSec && typeof durationSec === 'number') {
-    const mins = Math.floor(durationSec / 60);
-    const secs = Math.floor(durationSec % 60);
-    durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  } else if (item.duration_string) {
-    durationStr = item.duration_string;
-  }
-
-  const cleanUrl = sanitizeTrackUrl(
-    item.webpage_url || item.url || (item.id ? `https://www.youtube.com/watch?v=${item.id}` : cleanQuery)
-  );
-
   const trackInfo = {
-    title: item.title,
-    url: cleanUrl,
-    duration: durationStr,
+    title: meta.title,
+    url: meta.url,
+    duration: meta.duration || 'Unknown',
     requesterId: member.id
   };
 
