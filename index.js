@@ -46,8 +46,21 @@ import {
   buildTicketControl,
   buildCloseConfirmation,
   buildTranscriptLogEmbed,
-  buildWelcomePayload
+  buildWelcomePayload,
+  toSansSerif,
+  buildCommandsDirectoryPayload
 } from './panelBuilder.js';
+import {
+  joinVoice,
+  playMusic,
+  setMusicVolume,
+  pauseMusic,
+  resumeMusic,
+  replayMusic,
+  toggleMusicLoop,
+  leaveVoice,
+  getMusicQueue
+} from './musicManager.js';
 import { generateTranscript } from './transcript.js';
 import {
   fetchErlcServerData,
@@ -119,7 +132,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.DirectMessages
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.GuildVoiceStates
   ],
   partials: [Partials.Channel, Partials.Message]
 });
@@ -444,6 +458,11 @@ client.once(Events.ClientReady, async () => {
       console.warn('Error checking active giveaways:', e.message);
     }
   }, 15 * 1000);
+
+  // Cache application commands for clickable blue mentions
+  try {
+    await client.application?.commands.fetch().catch(() => null);
+  } catch {}
 });
 
 // Auto-clean active tickets if a channel is deleted manually in Discord
@@ -908,6 +927,131 @@ client.on(Events.MessageCreate, async message => {
         return sendCleanFeedback(`Staff application review channel set to <#${channelMention.id}>.`);
       }
     }
+
+    // -refont <text> (Convert to Mathematical Sans-Serif: 𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍)
+    if (command === 'refont') {
+      const text = args.join(' ').trim();
+      if (!text) {
+        return sendCleanFeedback('Usage: `-refont <text to convert>`');
+      }
+      const styled = toSansSerif(text);
+      await message.delete().catch(() => null);
+      return message.channel.send({ content: styled });
+    }
+
+    // -commands or -help
+    if (command === 'commands' || command === 'command' || command === 'help') {
+      const payload = buildCommandsDirectoryPayload(client, 0);
+      return message.channel.send(payload);
+    }
+
+    // -join
+    if (command === 'join') {
+      const voiceChannel = message.member?.voice?.channel;
+      if (!voiceChannel) {
+        return sendCleanFeedback('⚠️ You must be connected to a voice channel to use `-join`.');
+      }
+      try {
+        await joinVoice(voiceChannel, message.channel);
+        return sendCleanFeedback(`🔊 Successfully connected to **${voiceChannel.name}**!`);
+      } catch (err) {
+        return sendCleanFeedback(`Failed to join voice channel: ${err.message}`);
+      }
+    }
+
+    // -play <song name or url>
+    if (command === 'play' || command === 'p') {
+      const voiceChannel = message.member?.voice?.channel;
+      if (!voiceChannel) {
+        return sendCleanFeedback('⚠️ You must be connected to a voice channel to play music.');
+      }
+      const query = args.join(' ').trim();
+      if (!query) {
+        return sendCleanFeedback('Usage: `-play <song name or YouTube link>`');
+      }
+      try {
+        const res = await playMusic(voiceChannel, message.channel, query, message.author);
+        if (res.status === 'playing') {
+          return sendCleanFeedback(`▶️ **Now Playing:** **${res.track.title}** (${res.track.duration})`);
+        } else {
+          return sendCleanFeedback(`📝 **Queued (Position #${res.position}):** **${res.track.title}** (${res.track.duration})`);
+        }
+      } catch (err) {
+        return sendCleanFeedback(`Playback error: ${err.message}`);
+      }
+    }
+
+    // -volume <1-100>
+    if (command === 'volume' || command === 'vol') {
+      const level = parseInt(args[0], 10);
+      if (isNaN(level) || level < 1 || level > 100) {
+        return sendCleanFeedback('Usage: `-volume <1 - 100>`');
+      }
+      try {
+        const newVol = setMusicVolume(message.guild.id, level);
+        return sendCleanFeedback(`🔊 Playback volume set to **${newVol}%**.`);
+      } catch (err) {
+        return sendCleanFeedback(err.message);
+      }
+    }
+
+    // -pause
+    if (command === 'pause') {
+      try {
+        const ok = pauseMusic(message.guild.id);
+        if (ok) {
+          return sendCleanFeedback('⏸️ Music playback paused. Use `-resume` to continue.');
+        } else {
+          return sendCleanFeedback('Playback is not currently playing.');
+        }
+      } catch (err) {
+        return sendCleanFeedback(err.message);
+      }
+    }
+
+    // -resume
+    if (command === 'resume') {
+      try {
+        const ok = resumeMusic(message.guild.id);
+        if (ok) {
+          return sendCleanFeedback('▶️ Resumed music playback.');
+        } else {
+          return sendCleanFeedback('Playback is not currently paused.');
+        }
+      } catch (err) {
+        return sendCleanFeedback(err.message);
+      }
+    }
+
+    // -replay
+    if (command === 'replay') {
+      try {
+        await replayMusic(message.guild.id);
+        return sendCleanFeedback('🔄 Replaying current track from the beginning.');
+      } catch (err) {
+        return sendCleanFeedback(err.message);
+      }
+    }
+
+    // -loop
+    if (command === 'loop') {
+      try {
+        const isLooping = toggleMusicLoop(message.guild.id);
+        return sendCleanFeedback(`🔂 Track loop is now **${isLooping ? 'ENABLED' : 'DISABLED'}**.`);
+      } catch (err) {
+        return sendCleanFeedback(err.message);
+      }
+    }
+
+    // -leave / -stop / -dc
+    if (command === 'leave' || command === 'stop' || command === 'dc') {
+      const ok = leaveVoice(message.guild.id);
+      if (ok) {
+        return sendCleanFeedback('⏹️ Music stopped and disconnected from voice channel.');
+      } else {
+        return sendCleanFeedback('The bot is not currently in a voice channel.');
+      }
+    }
   } catch (err) {
     console.error('Error handling prefix command:', err);
   }
@@ -1361,6 +1505,19 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
         return;
+      }
+
+      // /commands or /command
+      if (interaction.commandName === 'commands' || interaction.commandName === 'command') {
+        const payload = buildCommandsDirectoryPayload(client, 0);
+        return interaction.reply(payload);
+      }
+
+      // /refont <text>
+      if (interaction.commandName === 'refont') {
+        const text = interaction.options.getString('text');
+        const styled = toSansSerif(text || '');
+        return interaction.reply({ content: styled });
       }
 
       if (interaction.commandName !== 'ticket') return;
@@ -2161,6 +2318,21 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 4. BUTTON INTERACTIONS                                                 */
     /* ---------------------------------------------------------------------- */
     if (interaction.isButton()) {
+      // Commands Directory Pagination Buttons
+      if (interaction.customId.startsWith('cmd_page_prev_')) {
+        const curPage = parseInt(interaction.customId.replace('cmd_page_prev_', ''), 10) || 0;
+        const newPage = Math.max(0, curPage - 1);
+        const payload = buildCommandsDirectoryPayload(client, newPage);
+        return interaction.update(payload);
+      }
+
+      if (interaction.customId.startsWith('cmd_page_next_')) {
+        const curPage = parseInt(interaction.customId.replace('cmd_page_next_', ''), 10) || 0;
+        const newPage = Math.min(3, curPage + 1);
+        const payload = buildCommandsDirectoryPayload(client, newPage);
+        return interaction.update(payload);
+      }
+
       // Application Module 1 Button
       if (interaction.customId === 'app_mod_btn_1') {
         const session = getActiveSession(interaction.user.id);

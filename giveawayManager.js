@@ -188,6 +188,20 @@ export async function endGiveaway(client, giveawayId) {
         await channel.send({
           content: `Congratulations ${winnerPings}! You won **${giveaway.prize}**! ${GIVEAWAY_EMOJI}`
         }).catch(() => null);
+
+        // Send direct message notification to each winner
+        for (const winnerId of giveaway.winners) {
+          try {
+            const user = await client.users.fetch(winnerId).catch(() => null);
+            if (user) {
+              await user.send({
+                content: `🎉 Congratulations <@${winnerId}>! You have won the giveaway for **${giveaway.prize}** in **Orlando Roleplay**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
+              }).catch(() => null);
+            }
+          } catch (dmErr) {
+            console.warn(`Could not DM giveaway winner ${winnerId}:`, dmErr.message);
+          }
+        }
       } else {
         await channel.send({
           content: `The giveaway for **${giveaway.prize}** has ended with no valid entrants.`
@@ -228,6 +242,20 @@ export async function rerollGiveaway(client, giveawayId, count = 1) {
       await channel.send({
         content: `New winner selected for **${giveaway.prize}**: ${winnerPings}! ${GIVEAWAY_EMOJI}`
       }).catch(() => null);
+
+      // Send direct message notification to each reroll winner
+      for (const winnerId of newWinners) {
+        try {
+          const user = await client.users.fetch(winnerId).catch(() => null);
+          if (user) {
+            await user.send({
+              content: `🎉 Congratulations <@${winnerId}>! You were selected as the new winner for **${giveaway.prize}** in **Orlando Roleplay**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
+            }).catch(() => null);
+          }
+        } catch (dmErr) {
+          console.warn(`Could not DM reroll winner ${winnerId}:`, dmErr.message);
+        }
+      }
     }
   } catch (err) {
     console.error(`Failed to reroll giveaway ${giveawayId}:`, err);

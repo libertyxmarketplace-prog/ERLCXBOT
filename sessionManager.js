@@ -1,12 +1,30 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { CONFIG } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SESSION_PANELS_FILE = path.join(__dirname, 'data', 'session_panels.json');
+
+/**
+ * Returns a permanent bottom banner payload using the local assets/bottom-banner.png file.
+ * This prevents Discord's expiring CDN URL errors completely.
+ */
+function getBottomBannerPayload() {
+  const bannerFile = path.join(__dirname, 'assets', 'bottom-banner.png');
+  if (fs.existsSync(bannerFile)) {
+    return {
+      url: 'attachment://bottom-banner.png',
+      attachment: new AttachmentBuilder(bannerFile, { name: 'bottom-banner.png' })
+    };
+  }
+  return {
+    url: CONFIG.SESSION.BOTTOM_BANNER_URL,
+    attachment: null
+  };
+}
 
 // Cache Roblox user info to prevent rate limits
 let cachedOwnerName = null;
@@ -313,14 +331,17 @@ export function buildSessionPanel(sessionData) {
     }
   ];
 
+  const bannerInfo = getBottomBannerPayload();
+  const files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
+
   // 10. Bottom Banner Image
-  if (CONFIG.SESSION.BOTTOM_BANNER_URL) {
+  if (bannerInfo.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bannerInfo.url
           }
         }
       ]
@@ -340,7 +361,8 @@ export function buildSessionPanel(sessionData) {
         type: 17, // Container
         components: containerComponents
       }
-    ]
+    ],
+    files
   };
 }
 
@@ -662,14 +684,17 @@ export function buildSessionEndedPanel(sessionData = null) {
     }
   ];
 
+  const bannerInfo = getBottomBannerPayload();
+  const files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
+
   // 4. Bottom Banner Image
-  if (CONFIG.SESSION.BOTTOM_BANNER_URL) {
+  if (bannerInfo.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bannerInfo.url
           }
         }
       ]
@@ -684,7 +709,8 @@ export function buildSessionEndedPanel(sessionData = null) {
         accent_color: 689405, // Modern blue (#0a84fd)
         components: containerComponents
       }
-    ]
+    ],
+    files
   };
 }
 
@@ -693,6 +719,9 @@ export function buildSessionEndedPanel(sessionData = null) {
  * Top banner, Orlando session ended text, and bottom banner — without any buttons.
  */
 export function buildSessionInfoCard() {
+  const bannerInfo = getBottomBannerPayload();
+  const files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
+
   const containerComponents = [
     // 1. Top Banner Image
     {
@@ -716,13 +745,13 @@ export function buildSessionInfoCard() {
   ];
 
   // 3. Bottom Banner Image
-  if (CONFIG.SESSION.BOTTOM_BANNER_URL) {
+  if (bannerInfo.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bannerInfo.url
           }
         }
       ]
@@ -737,7 +766,8 @@ export function buildSessionInfoCard() {
         accent_color: 689405, // Modern blue (#0a84fd)
         components: containerComponents
       }
-    ]
+    ],
+    files
   };
 }
 
