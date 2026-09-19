@@ -8,6 +8,7 @@ import {
   demuxProbe
 } from '@discordjs/voice';
 import youtubedl from 'youtube-dl-exec';
+import ffmpegPath from 'ffmpeg-static';
 
 // Map storing active guild queues: guildId -> MusicQueue
 const guildQueues = new Map();
@@ -73,7 +74,8 @@ class MusicQueue {
         output: '-',
         format: 'bestaudio/best',
         noWarnings: true,
-        preferFreeFormats: true
+        preferFreeFormats: true,
+        ffmpegLocation: ffmpegPath
       });
 
       this.currentProcess = cp;
@@ -243,7 +245,8 @@ export async function playMusic(voiceChannel, textChannel, query, member) {
     meta = await youtubedl(target, {
       dumpSingleJson: true,
       noWarnings: true,
-      defaultSearch: 'ytsearch'
+      defaultSearch: 'ytsearch',
+      ffmpegLocation: ffmpegPath
     });
   } catch (err) {
     console.error('Metadata extraction error:', err);

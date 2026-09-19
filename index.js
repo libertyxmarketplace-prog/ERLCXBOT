@@ -462,6 +462,9 @@ client.once(Events.ClientReady, async () => {
   // Cache application commands for clickable blue mentions
   try {
     await client.application?.commands.fetch().catch(() => null);
+    for (const g of client.guilds.cache.values()) {
+      await g.commands.fetch().catch(() => null);
+    }
   } catch {}
 });
 

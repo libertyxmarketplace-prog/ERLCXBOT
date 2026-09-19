@@ -2,8 +2,10 @@ import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  AttachmentBuilder
 } from 'discord.js';
+import fs from 'fs';
 import { CONFIG } from './config.js';
 import { loadDeskData, isReportStaffDisabled } from './storage.js';
 
@@ -503,16 +505,32 @@ export function toSansSerif(text) {
   });
 }
 
+// Real registered application command IDs for blue clickable pills
+const COMMAND_IDS = {
+  ticket: '1550289749351211018',
+  add: '1550289749351211019',
+  remove: '1550289749351211020',
+  session: '1550289749351211021',
+  purge: '1550292659447529532',
+  say: '1550301619864731788',
+  giveaway: '1550314105728929852',
+  application: '1550444074023260240',
+  commands: '1550686186178216078',
+  command: '1550686186178216079',
+  refont: '1550686186178216080'
+};
+
 /**
  * Resolves a clickable blue slash command mention string </name subcommand:id>.
  */
 export function getCommandMention(client, name, subcommand = '') {
-  let cmdId = '0';
-  if (client?.application?.commands?.cache) {
+  let cmdId = COMMAND_IDS[name];
+
+  if (!cmdId && client?.application?.commands?.cache) {
     const found = client.application.commands.cache.find(c => c.name === name);
     if (found) cmdId = found.id;
   }
-  if (cmdId === '0') {
+  if (!cmdId) {
     for (const g of (client?.guilds?.cache?.values() || [])) {
       const gFound = g.commands?.cache?.find(c => c.name === name);
       if (gFound) {
@@ -521,6 +539,7 @@ export function getCommandMention(client, name, subcommand = '') {
       }
     }
   }
+
   if (subcommand) {
     return `</${name} ${subcommand}:${cmdId || '0'}>`;
   }
@@ -539,10 +558,10 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
   const rightEmojiId = CONFIG.APPLICATIONS?.ARROW_RIGHT_EMOJI_ID || '1550446417376448593';
 
   const categoryTitles = [
-    'Support & Ticket System',
-    'ER:LC Live Sessions & Operations',
-    'Giveaways & Staff Applications',
-    'Voice Channel Music & Utilities'
+    'Support Desk & Ticket Operations',
+    'ER:LC Live Sessions & Announcements',
+    'Community Giveaways & Applications',
+    'Voice Channel Music & System Utilities'
   ];
 
   let pageContent = '';
@@ -550,7 +569,7 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
   if (safePage === 0) {
     pageContent = [
       `### ${categoryTitles[0]}`,
-      `> Complete command suite for ticket desk operations, transcripts, and member support.\n`,
+      `> Complete command suite for support desk management, transcripts, and tickets.\n`,
       `• ${getCommandMention(client, 'ticket', 'panel')} • Deploy the live auto-updating ticket panel`,
       `• ${getCommandMention(client, 'ticket', 'status')} • Update operational status (\`online\`, \`busy\`, \`closed\`)`,
       `• ${getCommandMention(client, 'ticket', 'category')} • Toggle individual categories on or off`,
@@ -559,7 +578,9 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
       `• ${getCommandMention(client, 'ticket', 'unclaim')} • Return ticket to public staff queue`,
       `• ${getCommandMention(client, 'ticket', 'add')} • Grant a user access to the ticket channel`,
       `• ${getCommandMention(client, 'ticket', 'remove')} • Revoke a user's ticket channel access`,
-      `• ${getCommandMention(client, 'ticket', 'rename')} • Rename current ticket channel\n`,
+      `• ${getCommandMention(client, 'ticket', 'rename')} • Rename current ticket channel`,
+      `• ${getCommandMention(client, 'purge')} • Bulk-delete messages in a channel`,
+      `• ${getCommandMention(client, 'say')} • Dispatch clean staff announcements\n`,
       `**Quick Prefix Commands:**`,
       `> \`-close [reason]\` • Fast-close ticket with mandatory transcript`,
       `> \`-open\` • Reopen or unlock a closed ticket channel`
@@ -601,7 +622,8 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
       `### ${categoryTitles[3]}`,
       `> High-fidelity voice channel music playback and utility formatting tools.\n`,
       `• ${getCommandMention(client, 'commands')} • Display this interactive command directory`,
-      `• ${getCommandMention(client, 'refont')} • Convert text into custom Mathematical Sans-Serif font\n`,
+      `• ${getCommandMention(client, 'command')} • Secondary slash command for directory`,
+      `• ${getCommandMention(client, 'refont')} • Convert text into Mathematical Sans-Serif font\n`,
       `**Voice Channel Music Commands:**`,
       `> \`-join\` • Summon bot into your current voice channel`,
       `> \`-play <url or search query>\` • Stream YouTube / web audio`,
@@ -617,47 +639,31 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
   }
 
   const containerComponents = [
-    // 1. Top Banner
+    // 1. Directory Header (No top banner, clean and modern)
+    {
+      type: 10,
+      content:
+        `## Orlando Roleplay | System Commands Manual\n` +
+        `> **Section ${safePage + 1} of ${totalPages}** • **${categoryTitles[safePage]}**\n` +
+        `> Click any blue command mention below to trigger it directly in Discord!`
+    },
+    // 2. Page Content with Blue Mentions
+    {
+      type: 10,
+      content: pageContent
+    },
+    // 3. Blue Accent Banner Strip right before the arrow buttons
     {
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.TOP_BANNER_URL
+            url: 'attachment://bottom-banner.png'
           }
         }
       ]
     },
-    // 2. Directory Header
-    {
-      type: 10,
-      content:
-        `## Orlando Roleplay | Command Manual & Directory\n` +
-        `> Click any blue command mention below to trigger it directly in Discord!`
-    },
-    // 3. Category Section Pill
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `**Directory Section • ${categoryTitles[safePage]}**\n-# Page ${safePage + 1} of ${totalPages} • Browse server commands below`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 1, // Blurple
-        label: `Section ${safePage + 1}`,
-        disabled: true,
-        custom_id: 'cmd_category_pill'
-      }
-    },
-    // 4. Page Content with Blue Mentions
-    {
-      type: 10,
-      content: pageContent
-    },
-    // 5. Arrow Pagination Action Row
+    // 4. Arrow Pagination Action Row
     {
       type: 1,
       components: [
@@ -671,7 +677,7 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
         {
           type: 2,
           style: 2, // Secondary Gray Pill
-          label: `${safePage + 1} / ${totalPages}`,
+          label: `Page ${safePage + 1} of ${totalPages}`,
           disabled: true,
           custom_id: 'cmd_page_info'
         },
@@ -684,12 +690,16 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
         }
       ]
     },
-    // 6. Micro Footer
+    // 5. Micro Footer
     {
       type: 10,
-      content: `-# Orlando Roleplay Systems • Type any slash command or prefix - to run`
+      content: `-# Orlando Roleplay Systems • Click any blue mention above to run`
     }
   ];
+
+  const bannerFile = fs.existsSync('./assets/bottom-banner.png')
+    ? new AttachmentBuilder('./assets/bottom-banner.png', { name: 'bottom-banner.png' })
+    : null;
 
   return {
     flags: 32768, // IS_COMPONENTS_V2
@@ -698,7 +708,8 @@ export function buildCommandsDirectoryPayload(client, page = 0) {
         type: 17, // Container
         components: containerComponents
       }
-    ]
+    ],
+    files: bannerFile ? [bannerFile] : []
   };
 }
 
