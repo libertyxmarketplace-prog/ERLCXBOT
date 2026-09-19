@@ -41,6 +41,20 @@ function writeJsonFile(filePath, data) {
   }
 }
 
+function getBottomBannerAttachment() {
+  const bottomBannerPath = path.join(__dirname, 'assets', 'bottom-banner.png');
+  if (fs.existsSync(bottomBannerPath)) {
+    return {
+      url: 'attachment://bottom-banner.png',
+      attachment: new AttachmentBuilder(bottomBannerPath, { name: 'bottom-banner.png' })
+    };
+  }
+  return {
+    url: CONFIG.SESSION?.BOTTOM_BANNER_URL || null,
+    attachment: null
+  };
+}
+
 export function loadApplicationsData() {
   return readJsonFile(APPLICATIONS_FILE, {
     submissions: {},
@@ -170,6 +184,11 @@ export function buildApplicationPanel() {
     topBannerMediaUrl = 'attachment://applications_banner.png';
   }
 
+  const bottomBanner = getBottomBannerAttachment();
+  if (bottomBanner.attachment) {
+    files.push(bottomBanner.attachment);
+  }
+
   const isIngameOpen = isPositionOpen('ingame_mod');
   const isDiscordOpen = isPositionOpen('discord_mod');
 
@@ -235,13 +254,13 @@ export function buildApplicationPanel() {
   });
 
   // 4. Bottom Banner
-  if (CONFIG.SESSION?.BOTTOM_BANNER_URL) {
+  if (bottomBanner.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bottomBanner.url
           }
         }
       ]
@@ -281,6 +300,11 @@ export function buildApplicationHubMessage(session) {
   let topBannerMediaUrl = 'attachment://applications_banner.png';
   if (fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
+  }
+
+  const bottomBanner = getBottomBannerAttachment();
+  if (bottomBanner.attachment) {
+    files.push(bottomBanner.attachment);
   }
 
   const mod1Done = Boolean(session.modules?.mod1);
@@ -377,13 +401,13 @@ export function buildApplicationHubMessage(session) {
   }
 
   // 5. Bottom accent strip
-  if (CONFIG.SESSION?.BOTTOM_BANNER_URL) {
+  if (bottomBanner.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bottomBanner.url
           }
         }
       ]
@@ -1157,14 +1181,19 @@ export function buildStaffReviewCard(submission, page = 0) {
     content: `-# Orlando Roleplay Staff Administration • Confidential Dossier #${submission.id.slice(0, 8).toUpperCase()}`
   });
 
+  const bottomBanner = getBottomBannerAttachment();
+  if (bottomBanner.attachment) {
+    files.push(bottomBanner.attachment);
+  }
+
   // 9. Bottom Accent Banner
-  if (CONFIG.SESSION?.BOTTOM_BANNER_URL) {
+  if (bottomBanner.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bottomBanner.url
           }
         }
       ]
@@ -1294,14 +1323,19 @@ export function buildApplicationResultV2(submission) {
     }
   ];
 
+  const bottomBanner = getBottomBannerAttachment();
+  if (bottomBanner.attachment) {
+    files.push(bottomBanner.attachment);
+  }
+
   // 8. Bottom Banner Accent Strip
-  if (CONFIG.SESSION?.BOTTOM_BANNER_URL) {
+  if (bottomBanner.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bottomBanner.url
           }
         }
       ]
@@ -1332,6 +1366,11 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
   let topBannerMediaUrl = 'attachment://applications_banner.png';
   if (fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
+  }
+
+  const bottomBanner = getBottomBannerAttachment();
+  if (bottomBanner.attachment) {
+    files.push(bottomBanner.attachment);
   }
 
   const isApproved = status === 'approved';
@@ -1444,13 +1483,13 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
   ];
 
   // 6. Bottom Banner Accent Strip
-  if (CONFIG.SESSION?.BOTTOM_BANNER_URL) {
+  if (bottomBanner.url) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.BOTTOM_BANNER_URL
+            url: bottomBanner.url
           }
         }
       ]
