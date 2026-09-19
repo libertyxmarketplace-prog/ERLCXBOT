@@ -48,7 +48,8 @@ import {
   buildTranscriptLogEmbed,
   buildWelcomePayload,
   toSansSerif,
-  buildCommandsDirectoryPayload
+  buildCommandsDirectoryPayload,
+  buildMediaShowcasePayload
 } from './panelBuilder.js';
 import {
   joinVoice,
@@ -955,6 +956,29 @@ client.on(Events.MessageCreate, async message => {
       return sentMsg;
     }
 
+    // -media [caption] (with image attachment)
+    if (command === 'media') {
+      const attachment = message.attachments.first();
+      if (!attachment) {
+        return sendCleanFeedback('⚠️ Please attach an image or screenshot to use `-media [caption]`.');
+      }
+      const caption = args.join(' ').trim() || null;
+      const { v2Payload, fallbackPayload } = buildMediaShowcasePayload({
+        attachment,
+        caption,
+        creditUser: message.author,
+        pingRole: null
+      });
+
+      await message.delete().catch(() => null);
+      try {
+        await message.channel.send(v2Payload);
+      } catch (v2Err) {
+        await message.channel.send(fallbackPayload);
+      }
+      return;
+    }
+
     // -join
     if (command === 'join') {
       const voiceChannel = message.member?.voice?.channel;
@@ -1532,6 +1556,39 @@ client.on(Events.InteractionCreate, async interaction => {
         const text = interaction.options.getString('text');
         const styled = toSansSerif(text || '');
         return interaction.reply({ content: styled });
+      }
+
+      // /media <image> [caption] [credit] [ping] [channel]
+      if (interaction.commandName === 'media') {
+        await interaction.deferReply({ flags: 64 });
+
+        const attachment = interaction.options.getAttachment('image');
+        if (!attachment) {
+          return interaction.editReply({ content: 'Please provide a valid image attachment.' });
+        }
+
+        const caption = interaction.options.getString('caption');
+        const pingRole = interaction.options.getRole('ping');
+        const creditUser = interaction.options.getUser('credit') || interaction.user;
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+        const { v2Payload, fallbackPayload } = buildMediaShowcasePayload({
+          attachment,
+          caption,
+          creditUser,
+          pingRole
+        });
+
+        try {
+          await targetChannel.send(v2Payload);
+        } catch (v2Err) {
+          console.warn('[Media] Components V2 send fallback:', v2Err.message);
+          await targetChannel.send(fallbackPayload);
+        }
+
+        return interaction.editReply({
+          content: `Successfully published media showcase in <#${targetChannel.id}>!`
+        });
       }
 
       if (interaction.commandName !== 'ticket') return;

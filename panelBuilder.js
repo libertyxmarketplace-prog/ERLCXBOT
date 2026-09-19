@@ -518,7 +518,8 @@ const GUILD_COMMAND_MAPS = {
     giveaway: '1550314106790350950',
     application: '1550444075444998165',
     commands: '1550686187792900147',
-    refont: '1550686187792900149'
+    refont: '1550686187792900149',
+    media: '1550717056221978666'
   },
   // Guild 2: 1530147023754367006
   '1530147023754367006': {
@@ -531,7 +532,8 @@ const GUILD_COMMAND_MAPS = {
     giveaway: '1550314105728929852',
     application: '1550444074023260240',
     commands: '1550686186178216078',
-    refont: '1550686186178216080'
+    refont: '1550686186178216080',
+    media: '1550717055261605918'
   }
 };
 
@@ -636,13 +638,14 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
       `### Voice Music & Utilities`,
       getCommandMention(client, 'commands', '', guildId),
       getCommandMention(client, 'refont', '', guildId),
+      getCommandMention(client, 'media', '', guildId),
       '',
       `**Music Prefix Commands**`,
       `\`-join\`  \`-play <query>\`  \`-volume <1-100>\``,
       `\`-pause\`  \`-unpause\` / \`-resume\`  \`-replay\`  \`-loop\`  \`-leave\``,
       '',
-      `**Font Styling**`,
-      `\`-refont <text>\``
+      `**Utility & Media Shortcuts**`,
+      `\`-refont <text>\`  \`-media [caption]\``
     ].join('\n');
   }
 
@@ -688,5 +691,89 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
     components: [row],
     files: bannerFile ? [bannerFile] : []
   };
+}
+
+/**
+ * Builds the Media Showcase payload in modern Discord Components V2 format,
+ * featuring the top camera emoji <:camera:1550716464200290386>, the uploaded image,
+ * user credit, optional caption, and local bottom banner attachment.
+ */
+export function buildMediaShowcasePayload({ attachment, caption = null, creditUser, pingRole = null }) {
+  const files = [];
+  const bottomBannerPath = './assets/bottom-banner.png';
+  let bottomBannerUrl = null;
+
+  if (fs.existsSync(bottomBannerPath)) {
+    files.push(new AttachmentBuilder(bottomBannerPath, { name: 'bottom-banner.png' }));
+    bottomBannerUrl = 'attachment://bottom-banner.png';
+  }
+
+  // Header content inside the card with camera emoji and user credit
+  let headerContent = `### <:camera:1550716464200290386> Credit: <@${creditUser.id}>`;
+  if (caption) {
+    headerContent += `\n> ${caption}`;
+  }
+
+  const containerComponents = [
+    {
+      type: 10,
+      content: headerContent
+    },
+    {
+      type: 12,
+      items: [
+        {
+          media: {
+            url: attachment.url
+          }
+        }
+      ]
+    }
+  ];
+
+  if (bottomBannerUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: bottomBannerUrl
+          }
+        }
+      ]
+    });
+  }
+
+  const v2Payload = {
+    content: pingRole ? `<@&${pingRole.id}>` : null,
+    flags: 32768,
+    components: [
+      {
+        type: 17,
+        components: containerComponents
+      }
+    ],
+    files
+  };
+
+  const fallbackEmbed = new EmbedBuilder()
+    .setColor(0x2B6CB0)
+    .setDescription(
+      `### <:camera:1550716464200290386> Credit: <@${creditUser.id}>\n` +
+      (caption ? `> ${caption}` : '')
+    )
+    .setImage(attachment.url)
+    .setFooter({
+      text: 'Orlando Roleplay • Media Showcase'
+    })
+    .setTimestamp();
+
+  const fallbackPayload = {
+    content: pingRole ? `<@&${pingRole.id}>` : null,
+    embeds: [fallbackEmbed],
+    files: []
+  };
+
+  return { v2Payload, fallbackPayload };
 }
 

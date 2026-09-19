@@ -373,6 +373,40 @@ const commands = [
         .setName('text')
         .setDescription('Text to convert into 𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍')
         .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('media')
+    .setDescription('Publish a showcase media post with credit and notification ping')
+    .addAttachmentOption(opt =>
+      opt
+        .setName('image')
+        .setDescription('Upload the media image or video')
+        .setRequired(true)
+    )
+    .addUserOption(opt =>
+      opt
+        .setName('credit')
+        .setDescription('Credit a user for the photo (defaults to yourself)')
+        .setRequired(false)
+    )
+    .addRoleOption(opt =>
+      opt
+        .setName('ping')
+        .setDescription('Role to ping for this media post (optional)')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('caption')
+        .setDescription('Add a caption or title (optional)')
+        .setRequired(false)
+    )
+    .addChannelOption(opt =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to post the media into (defaults to current channel)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
     )
 ].map(cmd => cmd.toJSON());
 
