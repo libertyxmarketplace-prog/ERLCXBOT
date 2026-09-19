@@ -2897,76 +2897,97 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // Giveaway Entry Toggle Button
       if (interaction.customId.startsWith('giveaway_enter_')) {
-        const rawId = interaction.customId.replace('giveaway_enter_', '').trim();
-        let giveaway = (rawId && rawId !== 'null' && rawId !== 'msg') ? getGiveaway(rawId) : null;
-
-        // Fallback 1: Resolve by message ID
-        if (!giveaway && interaction.message?.id) {
-          giveaway = getGiveaway(interaction.message.id);
-        }
-
-        // Fallback 2: Resolve active giveaway in this channel
-        if (!giveaway) {
-          giveaway = findActiveGiveaway(null, interaction.channelId);
-        }
-
-        // Fallback 3: Automatically recover giveaway record from message components if missing from storage
-        if (!giveaway && interaction.message) {
-          giveaway = recoverGiveawayFromMessage(interaction.message);
-        }
-
-        if (!giveaway) {
-          return interaction.reply({
-            content: 'Could not find giveaway record. This giveaway may have been removed.',
-            ephemeral: true
-          });
-        }
-
-        // Ensure giveaway.id is aligned with the actual Discord message
-        if (interaction.message?.id && giveaway.id !== interaction.message.id) {
-          giveaway.id = interaction.message.id;
-          saveGiveaway(giveaway);
-        }
-
-        if (giveaway.ended) {
-          return interaction.reply({
-            content: 'This giveaway has already concluded.',
-            ephemeral: true
-          });
-        }
-
-        giveaway.entries = Array.isArray(giveaway.entries) ? giveaway.entries : [];
-        const userId = interaction.user.id;
-        const entryIndex = giveaway.entries.indexOf(userId);
-        let feedback = '';
-
-        if (entryIndex === -1) {
-          giveaway.entries.push(userId);
-          feedback = `${GIVEAWAY_EMOJI} You have successfully entered the giveaway for **${giveaway.prize}**! (${giveaway.entries.length} total entries)`;
-        } else {
-          giveaway.entries.splice(entryIndex, 1);
-          feedback = `Your entry for **${giveaway.prize}** has been withdrawn. (${giveaway.entries.length} total entries)`;
-        }
-
-        saveGiveaway(giveaway);
-        await interaction.reply({ content: feedback, ephemeral: true });
-
-        // Update giveaway card in channel
         try {
-          const updatedCard = buildGiveawayCard(giveaway, false);
-          if (interaction.message) {
-            await interaction.message.edit(updatedCard).catch(() => null);
+          const rawId = interaction.customId.replace('giveaway_enter_', '').trim();
+          let giveaway = (rawId && rawId !== 'null' && rawId !== 'msg') ? getGiveaway(rawId) : null;
+
+          // Fallback 1: Resolve by message ID
+          if (!giveaway && interaction.message?.id) {
+            giveaway = getGiveaway(interaction.message.id);
+          }
+
+          // Fallback 2: Resolve active giveaway in this channel
+          if (!giveaway) {
+            giveaway = findActiveGiveaway(null, interaction.channelId);
+          }
+
+          // Fallback 3: Automatically recover giveaway record from message components if missing from storage
+          if (!giveaway && interaction.message) {
+            giveaway = recoverGiveawayFromMessage(interaction.message);
+          }
+
+          if (!giveaway) {
+            if (!interaction.replied && !interaction.deferred) {
+              return interaction.reply({
+                content: 'Could not find giveaway record. This giveaway may have been removed.',
+                ephemeral: true
+              }).catch(() => null);
+            }
+            return;
+          }
+
+          // Ensure giveaway.id is aligned with the actual Discord message
+          if (interaction.message?.id && giveaway.id !== interaction.message.id) {
+            giveaway.id = interaction.message.id;
+            saveGiveaway(giveaway);
+          }
+
+          if (giveaway.ended) {
+            if (!interaction.replied && !interaction.deferred) {
+              return interaction.reply({
+                content: 'This giveaway has already concluded.',
+                ephemeral: true
+              }).catch(() => null);
+            }
+            return;
+          }
+
+          giveaway.entries = Array.isArray(giveaway.entries) ? giveaway.entries : [];
+          const userId = interaction.user.id;
+          const entryIndex = giveaway.entries.indexOf(userId);
+          let feedback = '';
+
+          if (entryIndex === -1) {
+            giveaway.entries.push(userId);
+            feedback = `${GIVEAWAY_EMOJI} You have successfully entered the giveaway for **${giveaway.prize}**! (${giveaway.entries.length} total entries)`;
           } else {
-            const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
-            if (channel) {
-              const msg = await channel.messages.fetch(giveaway.id).catch(() => null);
-              if (msg) {
-                await msg.edit(updatedCard).catch(() => null);
+            giveaway.entries.splice(entryIndex, 1);
+            feedback = `Your entry for **${giveaway.prize}** has been withdrawn. (${giveaway.entries.length} total entries)`;
+          }
+
+          saveGiveaway(giveaway);
+
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: feedback, ephemeral: true }).catch(() => null);
+          } else {
+            await interaction.followUp({ content: feedback, ephemeral: true }).catch(() => null);
+          }
+
+          // Update giveaway card in channel
+          try {
+            const updatedCard = buildGiveawayCard(giveaway, false);
+            if (interaction.message) {
+              await interaction.message.edit(updatedCard).catch(() => null);
+            } else {
+              const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
+              if (channel) {
+                const msg = await channel.messages.fetch(giveaway.id).catch(() => null);
+                if (msg) {
+                  await msg.edit(updatedCard).catch(() => null);
+                }
               }
             }
+          } catch (updateErr) {
+            console.warn('Could not update giveaway card:', updateErr.message);
           }
-        } catch (updateErr) {
-          console.warn('Could not update giveaway card:', updateErr.message);
+        } catch (handlerErr) {
+          console.error('Error handling giveaway entry interaction:', handlerErr);
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: 'An error occurred while entering the giveaway. Please try again.',
+              ephemeral: true
+            }).catch(() => null);
+          }
         }
         return;
       }

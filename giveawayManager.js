@@ -319,6 +319,9 @@ export function findConcludedGiveaway(query = null, channelId = null) {
     return endedAll.sort((a, b) => (b.endsAt || b.startedAt) - (a.endsAt || a.startedAt))[0];
   }
 
+  return null;
+}
+
 /**
  * Extracts text recursively from Discord message components.
  */
@@ -341,8 +344,16 @@ export function recoverGiveawayFromMessage(message) {
   if (!message) return null;
 
   let text = (message.content || '') + '\n' + extractTextFromComponents(message.components);
-  if (!text.toLowerCase().includes('ends') && !text.toLowerCase().includes('hosted')) {
-    return null;
+  if (Array.isArray(message.embeds)) {
+    for (const em of message.embeds) {
+      if (em.title) text += '\n' + em.title;
+      if (em.description) text += '\n' + em.description;
+      if (Array.isArray(em.fields)) {
+        for (const f of em.fields) {
+          text += '\n' + f.name + ': ' + f.value;
+        }
+      }
+    }
   }
 
   // Parse prize from ### <:Giveaway:...> prize or ### prize
