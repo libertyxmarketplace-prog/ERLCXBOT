@@ -470,15 +470,40 @@ export function buildTranscriptLogEmbed({
  * Builds the official Welcome message and member count display button.
  */
 export function buildWelcomePayload(member) {
-  const memberCount = member.guild?.memberCount || 1;
-  const content = `${CONFIG.WELCOME.WELCOME_EMOJI} Welcome to ${CONFIG.WELCOME.SERVER_NAME}, <@${member.id}>. Navigate the server through <#${CONFIG.WELCOME.NAVIGATE_CHANNEL_ID}>`;
+  const guild = member.guild;
+  const memberCount = guild?.memberCount || 1;
+  const serverName = guild?.name || CONFIG.WELCOME.SERVER_NAME || 'Orlando Roleplay';
+
+  // Determine navigate channel ID
+  let navChannelId = CONFIG.WELCOME.NAVIGATE_CHANNEL_ID;
+  if (guild && !guild.channels.cache.has(navChannelId)) {
+    const navCh = guild.channels.cache.find(c =>
+      c.isTextBased() && (c.name.includes('regulation') || c.name.includes('rules') || c.name.includes('info'))
+    );
+    if (navCh) navChannelId = navCh.id;
+  }
+
+  // Determine welcome emoji
+  let welcomeEmoji = CONFIG.WELCOME.WELCOME_EMOJI;
+  if (guild?.id !== '1541210827967823955' && !guild?.emojis.cache.has('1548529700731752478')) {
+    welcomeEmoji = '👋';
+  }
+
+  const content = navChannelId
+    ? `${welcomeEmoji} Welcome to ${serverName}, <@${member.id}>. Navigate the server through <#${navChannelId}>`
+    : `${welcomeEmoji} Welcome to ${serverName}, <@${member.id}>!`;
 
   const memberBtn = new ButtonBuilder()
     .setCustomId('welcome_member_count')
     .setStyle(ButtonStyle.Secondary)
     .setLabel(`${memberCount.toLocaleString()} Members`)
-    .setEmoji({ id: CONFIG.WELCOME.PEOPLE_EMOJI_ID, name: CONFIG.WELCOME.PEOPLE_EMOJI_NAME })
     .setDisabled(true);
+
+  if (guild?.id === '1541210827967823955' || guild?.emojis.cache.has(CONFIG.WELCOME.PEOPLE_EMOJI_ID)) {
+    memberBtn.setEmoji({ id: CONFIG.WELCOME.PEOPLE_EMOJI_ID, name: CONFIG.WELCOME.PEOPLE_EMOJI_NAME });
+  } else {
+    memberBtn.setEmoji('👥');
+  }
 
   const row = new ActionRowBuilder().addComponents(memberBtn);
 
@@ -698,20 +723,25 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
  * featuring the top camera emoji <:camera:1550716464200290386>, the uploaded image,
  * user credit, optional caption, and local bottom banner attachment.
  */
-export function buildMediaShowcasePayload({ attachment, caption = null, creditUser, pingRole = null }) {
+export function buildMediaShowcasePayload({ attachment, title = null, caption = null, creditUser, pingRole = null }) {
   const files = [];
-  const bottomBannerPath = './assets/bottom-banner.png';
-  let bottomBannerUrl = null;
+  const fileName = attachment.name || 'media.png';
 
-  if (fs.existsSync(bottomBannerPath)) {
-    files.push(new AttachmentBuilder(bottomBannerPath, { name: 'bottom-banner.png' }));
-    bottomBannerUrl = 'attachment://bottom-banner.png';
-  }
+  // Forward attachment into files array so Components V2 can reference attachment://
+  files.push(new AttachmentBuilder(attachment.url, { name: fileName }));
 
-  // Header content inside the card with camera emoji and user credit
-  let headerContent = `### <:camera:1550716464200290386> Credit: <@${creditUser.id}>`;
-  if (caption) {
-    headerContent += `\n> ${caption}`;
+  // Header content inside the card with camera emoji, optional title, credit and caption
+  let headerContent = '';
+  if (title && title.trim()) {
+    headerContent = `### <:camera:1550716464200290386> ${title.trim()}\n> **Credit:** <@${creditUser.id}>`;
+    if (caption && caption.trim()) {
+      headerContent += `\n> ${caption.trim()}`;
+    }
+  } else {
+    headerContent = `### <:camera:1550716464200290386> Credit: <@${creditUser.id}>`;
+    if (caption && caption.trim()) {
+      headerContent += `\n> ${caption.trim()}`;
+    }
   }
 
   const containerComponents = [
@@ -724,25 +754,12 @@ export function buildMediaShowcasePayload({ attachment, caption = null, creditUs
       items: [
         {
           media: {
-            url: attachment.url
+            url: `attachment://${fileName}`
           }
         }
       ]
     }
   ];
-
-  if (bottomBannerUrl) {
-    containerComponents.push({
-      type: 12,
-      items: [
-        {
-          media: {
-            url: bottomBannerUrl
-          }
-        }
-      ]
-    });
-  }
 
   const v2Payload = {
     content: pingRole ? `<@&${pingRole.id}>` : null,
@@ -756,22 +773,16 @@ export function buildMediaShowcasePayload({ attachment, caption = null, creditUs
     files
   };
 
+  // Fallback embed WITHOUT bottom banner and WITHOUT footer text/timestamp
   const fallbackEmbed = new EmbedBuilder()
     .setColor(0x2B6CB0)
-    .setDescription(
-      `### <:camera:1550716464200290386> Credit: <@${creditUser.id}>\n` +
-      (caption ? `> ${caption}` : '')
-    )
-    .setImage(attachment.url)
-    .setFooter({
-      text: 'Orlando Roleplay • Media Showcase'
-    })
-    .setTimestamp();
+    .setDescription(headerContent)
+    .setImage(`attachment://${fileName}`);
 
   const fallbackPayload = {
     content: pingRole ? `<@&${pingRole.id}>` : null,
     embeds: [fallbackEmbed],
-    files: []
+    files: [new AttachmentBuilder(attachment.url, { name: fileName })]
   };
 
   return { v2Payload, fallbackPayload };

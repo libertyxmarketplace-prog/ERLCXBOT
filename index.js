@@ -112,6 +112,7 @@ import {
   getSubmission,
   updateSubmission,
   setReviewChannel,
+  setResultsChannel,
   getReviewChannelId,
   getResultsChannelId,
   getRoleDisplayName,
@@ -123,6 +124,7 @@ import {
   buildModule4Modal,
   buildStaffReviewCard,
   buildApplicationResultV2,
+  buildApplicationResultFallback,
   buildApplicationStatusDmV2
 } from './applicationManager.js';
 
@@ -487,19 +489,39 @@ client.on(Events.ChannelDelete, async channel => {
 // Send Welcome Message when a new member joins
 client.on(Events.GuildMemberAdd, async member => {
   try {
-    const welcomeChannelId = CONFIG.WELCOME.CHANNEL_ID;
-    if (!welcomeChannelId) return;
+    const guild = member.guild;
+    console.log(`[GuildMemberAdd] User ${member.user.tag} (${member.id}) joined ${guild.name} (${guild.id})`);
 
-    const channel = member.guild.channels.cache.get(welcomeChannelId) ||
-      await member.guild.channels.fetch(welcomeChannelId).catch(() => null);
+    let channel = null;
+    const GUILD_WELCOME_MAP = {
+      '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397', // Orlando Roleplay #𝖬𝖺𝗂𝗇
+      '1530147023754367006': '1549635572698447932' // Discord bot V.2 #welcome
+    };
+
+    const preferredId = GUILD_WELCOME_MAP[guild.id] || CONFIG.WELCOME.CHANNEL_ID;
+    if (preferredId) {
+      channel = guild.channels.cache.get(preferredId) ||
+        await guild.channels.fetch(preferredId).catch(() => null);
+    }
 
     if (!channel) {
-      console.warn(`Welcome channel ${welcomeChannelId} not found in guild ${member.guild.name}`);
+      channel = guild.channels.cache.find(c =>
+        c.isTextBased() && (
+          c.name.toLowerCase().includes('welcome') ||
+          c.name === '𝖬𝖺𝗂𝗇' ||
+          c.name.toLowerCase() === 'main'
+        )
+      );
+    }
+
+    if (!channel) {
+      console.warn(`[GuildMemberAdd] Welcome channel not found in guild ${guild.name} (${guild.id})`);
       return;
     }
 
     const payload = buildWelcomePayload(member);
     await channel.send(payload);
+    console.log(`[GuildMemberAdd] Sent welcome card to #${channel.name} in ${guild.name}`);
   } catch (err) {
     console.error('Error sending welcome message on guildMemberAdd:', err);
   }
@@ -795,7 +817,15 @@ client.on(Events.MessageCreate, async message => {
     // -testwelcome / -welcome
     if (command === 'testwelcome' || command === 'welcome') {
       if (!isStaff(message.member)) return;
-      const targetChannel = message.guild.channels.cache.get(CONFIG.WELCOME.CHANNEL_ID) || message.channel;
+      const GUILD_WELCOME_MAP = {
+        '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397',
+        '1530147023754367006': '1549635572698447932'
+      };
+      const preferredId = GUILD_WELCOME_MAP[message.guild.id] || CONFIG.WELCOME.CHANNEL_ID;
+      const targetChannel = (preferredId ? message.guild.channels.cache.get(preferredId) : null) ||
+        message.guild.channels.cache.find(c => c.isTextBased() && (c.name.includes('welcome') || c.name === '𝖬𝖺𝗂𝗇' || c.name === 'main')) ||
+        message.channel;
+
       const payload = buildWelcomePayload(message.member);
       await targetChannel.send(payload);
       return sendCleanFeedback(`Sent test welcome message to <#${targetChannel.id}>!`);
@@ -932,6 +962,26 @@ client.on(Events.MessageCreate, async message => {
         setReviewChannel(channelMention.id);
         return sendCleanFeedback(`Staff application review channel set to <#${channelMention.id}>.`);
       }
+
+      if (sub === 'setresults' || sub === 'setresult' || sub === 'results') {
+        const channelMention = message.mentions.channels.first();
+        if (!channelMention) {
+          return sendCleanFeedback('Please mention a channel: `-app setresults #channel`');
+        }
+        setResultsChannel(channelMention.id);
+        return sendCleanFeedback(`Staff application results channel set to <#${channelMention.id}>.`);
+      }
+    }
+
+    // -setresults #channel / -results #channel
+    if (command === 'setresults' || command === 'results') {
+      if (!isStaff(message.member)) return;
+      const channelMention = message.mentions.channels.first();
+      if (!channelMention) {
+        return sendCleanFeedback('Please mention a channel: `-setresults #channel`');
+      }
+      setResultsChannel(channelMention.id);
+      return sendCleanFeedback(`Staff application results channel set to <#${channelMention.id}>.`);
     }
 
     // -refont <text> (Convert to Mathematical Sans-Serif: 𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍)
@@ -1538,6 +1588,22 @@ client.on(Events.InteractionCreate, async interaction => {
             content: `Staff application review channel has been set to <#${targetChannel.id}>.`
           });
         }
+
+        if (subcommand === 'setresults') {
+          await interaction.deferReply({ ephemeral: true });
+
+          if (!isStaff(interaction.member, interaction)) {
+            return interaction.editReply({
+              content: 'You must be a staff member or administrator to run this command.'
+            });
+          }
+
+          const targetChannel = interaction.options.getChannel('channel');
+          setResultsChannel(targetChannel.id);
+          return interaction.editReply({
+            content: `Staff application results channel has been set to <#${targetChannel.id}>.`
+          });
+        }
         return;
       }
 
@@ -1558,7 +1624,7 @@ client.on(Events.InteractionCreate, async interaction => {
         return interaction.reply({ content: styled });
       }
 
-      // /media <image> [caption] [credit] [ping] [channel]
+      // /media <image> [title] [caption] [credit] [ping] [channel]
       if (interaction.commandName === 'media') {
         await interaction.deferReply({ flags: 64 });
 
@@ -1567,6 +1633,7 @@ client.on(Events.InteractionCreate, async interaction => {
           return interaction.editReply({ content: 'Please provide a valid image attachment.' });
         }
 
+        const title = interaction.options.getString('title');
         const caption = interaction.options.getString('caption');
         const pingRole = interaction.options.getRole('ping');
         const creditUser = interaction.options.getUser('credit') || interaction.user;
@@ -1574,6 +1641,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         const { v2Payload, fallbackPayload } = buildMediaShowcasePayload({
           attachment,
+          title,
           caption,
           creditUser,
           pingRole
@@ -2319,10 +2387,18 @@ client.on(Events.InteractionCreate, async interaction => {
           const resultsChan = await client.channels.fetch(resultsChanId).catch(() => null);
           if (resultsChan && resultsChan.isTextBased()) {
             const resultPayload = buildApplicationResultV2(updatedSubmission);
-            await resultsChan.send(resultPayload);
+            try {
+              await resultsChan.send(resultPayload);
+            } catch (v2Err) {
+              console.warn('[Applications] Components V2 failed for results channel, using fallback embed:', v2Err.message);
+              const fallbackPayload = buildApplicationResultFallback(updatedSubmission);
+              await resultsChan.send(fallbackPayload);
+            }
+          } else {
+            console.warn(`[Applications] Results channel ${resultsChanId} not found or not text-based.`);
           }
         } catch (resErr) {
-          console.warn('Could not post acceptance announcement to results channel:', resErr.message);
+          console.error('[Applications] Could not post acceptance announcement to results channel:', resErr);
         }
 
         // Notify applicant via clean, professional Components V2 DM
@@ -2364,6 +2440,26 @@ client.on(Events.InteractionCreate, async interaction => {
         const updatedSubmission = getSubmission(subId);
         const reviewPayload = buildStaffReviewCard(updatedSubmission, 0);
         await interaction.update(reviewPayload);
+
+        // Post public denial announcement to results channel (1550413729013829725)
+        try {
+          const resultsChanId = getResultsChannelId();
+          const resultsChan = await client.channels.fetch(resultsChanId).catch(() => null);
+          if (resultsChan && resultsChan.isTextBased()) {
+            const resultPayload = buildApplicationResultV2(updatedSubmission);
+            try {
+              await resultsChan.send(resultPayload);
+            } catch (v2Err) {
+              console.warn('[Applications] Components V2 failed for results channel, using fallback embed:', v2Err.message);
+              const fallbackPayload = buildApplicationResultFallback(updatedSubmission);
+              await resultsChan.send(fallbackPayload);
+            }
+          } else {
+            console.warn(`[Applications] Results channel ${resultsChanId} not found or not text-based.`);
+          }
+        } catch (resErr) {
+          console.error('[Applications] Could not post denial announcement to results channel:', resErr);
+        }
 
         // Notify applicant via clean, professional Components V2 DM
         try {

@@ -361,6 +361,18 @@ const commands = [
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(true)
         )
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('setresults')
+        .setDescription('Set the channel where accepted/denied application results are announced')
+        .addChannelOption(opt =>
+          opt
+            .setName('channel')
+            .setDescription('Channel for public staff application results')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(true)
+        )
     ),
   new SlashCommandBuilder()
     .setName('commands')
@@ -397,8 +409,14 @@ const commands = [
     )
     .addStringOption(opt =>
       opt
+        .setName('title')
+        .setDescription('Add a showcase title (optional)')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
         .setName('caption')
-        .setDescription('Add a caption or title (optional)')
+        .setDescription('Add a caption or description (optional)')
         .setRequired(false)
     )
     .addChannelOption(opt =>

@@ -1214,9 +1214,10 @@ export function buildStaffReviewCard(submission, page = 0) {
 
 /**
  * Builds the modern Discord Components V2 result card posted into the public results channel
- * (1550413729013829725) when an application is accepted.
+ * (1550413729013829725) when an application is accepted or denied.
  */
 export function buildApplicationResultV2(submission) {
+  const isApproved = submission.status === 'approved';
   const roleName = getRoleDisplayName(submission.role);
   const bannerPath = path.join(__dirname, 'assets', 'applications_banner.png');
   const files = [];
@@ -1225,6 +1226,9 @@ export function buildApplicationResultV2(submission) {
   if (fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
   }
+
+  const statusLabel = isApproved ? 'Accepted' : 'Denied';
+  const statusStyle = isApproved ? 3 : 4; // 3 = Success Green, 4 = Danger Red
 
   const containerComponents = [
     // 1. Top Banner
@@ -1243,32 +1247,34 @@ export function buildApplicationResultV2(submission) {
       type: 10,
       content:
         `## Orlando Roleplay | Staff Application Result\n` +
-        `> Please join us in welcoming our newest staff member to the **Orlando Roleplay** team!\n`
+        (isApproved
+          ? `> Please join us in welcoming our newest staff member to the **Orlando Roleplay** team!\n`
+          : `> Thank you to all candidates who applied for the **Orlando Roleplay** staff team.\n`)
     },
-    // 3. Candidate Section with Green Status Pill
+    // 3. Candidate Section with Status Pill
     {
       type: 9,
       components: [
         {
           type: 10,
-          content: `**Appointed Staff Member**\n<@${submission.userId}> • \`${submission.userTag || submission.userId}\``
+          content: `**Applicant**\n<@${submission.userId}> • \`${submission.userTag || submission.userId}\``
         }
       ],
       accessory: {
         type: 2,
-        style: 3, // Success Green Pill
-        label: 'Accepted',
+        style: statusStyle,
+        label: statusLabel,
         disabled: true,
         custom_id: 'app_result_status_pill'
       }
     },
-    // 4. Role Section with Gray Position Pill
+    // 4. Role Section with Position Pill
     {
       type: 9,
       components: [
         {
           type: 10,
-          content: `**Staff Division & Position**\nOfficial appointment to **${roleName}**.`
+          content: `**Staff Division & Position**\n${isApproved ? 'Official appointment to' : 'Application for'} **${roleName}**.`
         }
       ],
       accessory: {
@@ -1283,52 +1289,60 @@ export function buildApplicationResultV2(submission) {
     {
       type: 10,
       content:
-        `### Verification & Onboarding\n` +
-        `> • **Decision:** **Accepted** by <@${submission.reviewedBy}>\n` +
-        `> • **Date Approved:** <t:${Math.floor((submission.reviewedAt || Date.now()) / 1000)}:f>\n` +
-        (submission.notes ? `> • **Executive Notes:** ${submission.notes}\n` : '') +
+        `### Verification & Decision\n` +
+        `> • **Decision:** **${statusLabel}** by <@${submission.reviewedBy}>\n` +
+        `> • **Date Reviewed:** <t:${Math.floor((submission.reviewedAt || Date.now()) / 1000)}:f>\n` +
+        (submission.notes ? `> • **Notes / Feedback:** ${submission.notes}\n` : '') +
         `\n### Next Steps\n` +
-        `> Please head over to <#1548146597743960146> and open a ticket to claim your staff permissions and schedule your staff orientation & patrol training.`
-    },
-    // 6. Action Row with Buttons INSIDE Container
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 3, // Success Green
-          label: 'Accepted',
-          disabled: true,
-          custom_id: 'app_result_btn_status'
-        },
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          label: roleName,
-          disabled: true,
-          custom_id: 'app_result_btn_role'
-        },
-        {
-          type: 2,
-          style: 1, // Primary Blurple for Call To Action
-          label: 'Open Training Ticket',
-          custom_id: `app_training_ticket_${submission.userId}_${submission.id}`
-        }
-      ]
-    },
-    // 7. Micro Footer
-    {
-      type: 10,
-      content: `-# Orlando Roleplay Staff Administration • Official Acceptance Announcement`
+        (isApproved
+          ? `> Please head over to <#1548146597743960146> and open a ticket to claim your staff permissions and schedule your staff orientation & patrol training.`
+          : `> You may reapply during our next staff application cycle. We encourage you to remain active and try again!`)
     }
   ];
+
+  // 6. Action Buttons inside card
+  const buttonComponents = [
+    {
+      type: 2,
+      style: statusStyle,
+      label: statusLabel,
+      disabled: true,
+      custom_id: 'app_result_btn_status'
+    },
+    {
+      type: 2,
+      style: 2,
+      label: roleName,
+      disabled: true,
+      custom_id: 'app_result_btn_role'
+    }
+  ];
+
+  if (isApproved) {
+    buttonComponents.push({
+      type: 2,
+      style: 1, // Primary Blurple
+      label: 'Open Training Ticket',
+      custom_id: `app_training_ticket_${submission.userId}_${submission.id}`
+    });
+  }
+
+  containerComponents.push({
+    type: 1,
+    components: buttonComponents
+  });
+
+  // 7. Micro Footer
+  containerComponents.push({
+    type: 10,
+    content: `-# Orlando Roleplay Staff Administration • Official Application Result`
+  });
 
   const bottomBanner = getBottomBannerAttachment();
   if (bottomBanner.attachment) {
     files.push(bottomBanner.attachment);
   }
 
-  // 8. Bottom Banner Accent Strip
   if (bottomBanner.url) {
     containerComponents.push({
       type: 12,
@@ -1350,6 +1364,59 @@ export function buildApplicationResultV2(submission) {
         components: containerComponents
       }
     ],
+    files
+  };
+}
+
+/**
+ * Fallback Embed result card if Discord Components V2 is unavailable
+ */
+export function buildApplicationResultFallback(submission) {
+  const isApproved = submission.status === 'approved';
+  const roleName = getRoleDisplayName(submission.role);
+  const bannerPath = path.join(__dirname, 'assets', 'applications_banner.png');
+  const files = [];
+
+  if (fs.existsSync(bannerPath)) {
+    files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(isApproved ? 0x2ecc71 : 0xe74c3c)
+    .setTitle(`Orlando Roleplay | Staff Application Result`)
+    .setDescription(
+      (isApproved
+        ? `> Please join us in welcoming our newest staff member to the **Orlando Roleplay** team!\n\n`
+        : `> Thank you to all candidates who applied for the **Orlando Roleplay** staff team.\n\n`) +
+      `**Applicant:** <@${submission.userId}> (\`${submission.userTag || submission.userId}\`)\n` +
+      `**Position:** **${roleName}**\n` +
+      `**Decision:** **${isApproved ? 'Accepted' : 'Denied'}**\n` +
+      `**Reviewed By:** <@${submission.reviewedBy}>\n` +
+      `**Date:** <t:${Math.floor((submission.reviewedAt || Date.now()) / 1000)}:f>\n` +
+      (submission.notes ? `**Notes / Feedback:** ${submission.notes}\n` : '') +
+      `\n**Next Steps:**\n` +
+      (isApproved
+        ? `> Please open a ticket in <#1548146597743960146> to complete your staff orientation.`
+        : `> You may reapply during our next staff application cycle.`)
+    )
+    .setImage('attachment://applications_banner.png')
+    .setFooter({ text: 'Orlando Roleplay Staff Administration' })
+    .setTimestamp();
+
+  const components = [];
+  if (isApproved) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Primary)
+        .setLabel('Open Training Ticket')
+        .setCustomId(`app_training_ticket_${submission.userId}_${submission.id}`)
+    );
+    components.push(row);
+  }
+
+  return {
+    embeds: [embed],
+    components,
     files
   };
 }
