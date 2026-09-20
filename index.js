@@ -3188,14 +3188,14 @@ client.on(Events.InteractionCreate, async interaction => {
         const curPage = parseInt(interaction.customId.replace('cmd_page_prev_', ''), 10) || 0;
         const newPage = Math.max(0, curPage - 1);
         const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
-        return interaction.update(payload);
+        return interaction.update(payload).catch(() => null);
       }
 
       if (interaction.customId.startsWith('cmd_page_next_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_next_', ''), 10) || 0;
         const newPage = Math.min(4, curPage + 1);
         const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
-        return interaction.update(payload);
+        return interaction.update(payload).catch(() => null);
       }
 
       // Application Module 1 Button
@@ -4268,18 +4268,45 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
   } catch (error) {
+    if (error.code === 10062 || error.code === 40060) {
+      // Ignore expired interactions or duplicate acknowledgments from concurrent instances
+      return;
+    }
     console.error('Error handling interaction:', error);
-    if (interaction.deferred && !interaction.replied) {
-      await interaction.editReply({
-        content: `An error occurred: ${error.message || 'Unknown error'}`
-      }).catch(() => null);
-    } else if (!interaction.replied) {
-      await interaction.reply({
-        content: `An error occurred: ${error.message || 'Unknown error'}`,
-        ephemeral: true
-      }).catch(() => null);
+    try {
+      if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply({
+          content: `An error occurred: ${error.message || 'Unknown error'}`
+        }).catch(() => null);
+      } else if (!interaction.replied) {
+        await interaction.reply({
+          content: `An error occurred: ${error.message || 'Unknown error'}`,
+          flags: 64
+        }).catch(() => null);
+      }
+    } catch {
+      // Ignore secondary reply failures
     }
   }
+});
+
+/* ========================================================================== */
+/*                      PROCESS & CLIENT ERROR LISTENERS                      */
+/* ========================================================================== */
+
+client.on(Events.Error, error => {
+  if (error.code === 10062 || error.code === 40060) return;
+  console.warn('Discord client error:', error.message);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason?.code === 10062 || reason?.code === 40060) return;
+  console.warn('Unhandled Rejection:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err, origin) => {
+  if (err?.code === 10062 || err?.code === 40060) return;
+  console.error(`Uncaught Exception (${origin}):`, err);
 });
 
 /* ========================================================================== */
