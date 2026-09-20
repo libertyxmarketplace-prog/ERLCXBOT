@@ -1376,9 +1376,10 @@ client.on(Events.MessageCreate, async message => {
         }
       }
 
-      let targetChannel = message.guild.channels.cache.find(c =>
-        c.name.toLowerCase().includes('promotion') && c.isTextBased()
-      ) || message.channel;
+      const PROMOTIONS_CHANNEL_ID = '1550709402896568320';
+      let targetChannel = message.guild.channels.cache.get(PROMOTIONS_CHANNEL_ID) ||
+        await client.channels.fetch(PROMOTIONS_CHANNEL_ID).catch(() => null) ||
+        message.channel;
 
       try {
         const promoCard = buildPromotionCard({
@@ -1414,10 +1415,10 @@ client.on(Events.MessageCreate, async message => {
       const reason = parts[1] || 'Failure to adhere to staff operational policy';
       const proof = parts[2] || null;
 
-      let targetChannel = message.guild.channels.cache.get('1550413729013829725') ||
-        message.guild.channels.cache.find(c =>
-          c.name.toLowerCase().includes('infraction') && c.isTextBased()
-        ) || message.channel;
+      const INFRACTIONS_CHANNEL_ID = '1550709451152162887';
+      let targetChannel = message.guild.channels.cache.get(INFRACTIONS_CHANNEL_ID) ||
+        await client.channels.fetch(INFRACTIONS_CHANNEL_ID).catch(() => null) ||
+        message.channel;
 
       try {
         const infractCard = buildInfractionCard({
@@ -1933,6 +1934,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // /staffdocs panel [channel]
       if (interaction.commandName === 'staffdocs') {
+        if (interaction.deferred || interaction.replied) return;
         await interaction.deferReply({ flags: 64 });
         if (!isStaff(interaction.member, interaction)) {
           return interaction.editReply({
@@ -1956,6 +1958,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // /promote <user> [role] [rank] [old_role] [old_rank] [reason] [channel]
       if (interaction.commandName === 'promote') {
+        if (interaction.deferred || interaction.replied) return;
         await interaction.deferReply({ flags: 64 });
         if (!isStaff(interaction.member, interaction)) {
           return interaction.editReply({
@@ -1993,12 +1996,11 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
 
-        let targetChannel = interaction.options.getChannel('channel');
-        if (!targetChannel) {
-          targetChannel = interaction.guild.channels.cache.find(c =>
-            c.name.toLowerCase().includes('promotion') && c.isTextBased()
-          ) || interaction.channel;
-        }
+        const PROMOTIONS_CHANNEL_ID = '1550709402896568320';
+        let targetChannel = interaction.options.getChannel('channel') ||
+          interaction.guild.channels.cache.get(PROMOTIONS_CHANNEL_ID) ||
+          await client.channels.fetch(PROMOTIONS_CHANNEL_ID).catch(() => null) ||
+          interaction.channel;
 
         try {
           const promoCard = buildPromotionCard({
@@ -2029,6 +2031,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // /infract <user> <type> <reason> [proof] [channel]
       if (interaction.commandName === 'infract') {
+        if (interaction.deferred || interaction.replied) return;
         await interaction.deferReply({ flags: 64 });
         if (!isStaff(interaction.member, interaction)) {
           return interaction.editReply({
@@ -2040,13 +2043,11 @@ client.on(Events.InteractionCreate, async interaction => {
         const reason = interaction.options.getString('reason');
         const proof = interaction.options.getString('proof');
 
-        let targetChannel = interaction.options.getChannel('channel');
-        if (!targetChannel) {
-          targetChannel = interaction.guild.channels.cache.get('1550413729013829725') ||
-            interaction.guild.channels.cache.find(c =>
-              c.name.toLowerCase().includes('infraction') && c.isTextBased()
-            ) || interaction.channel;
-        }
+        const INFRACTIONS_CHANNEL_ID = '1550709451152162887';
+        let targetChannel = interaction.options.getChannel('channel') ||
+          interaction.guild.channels.cache.get(INFRACTIONS_CHANNEL_ID) ||
+          await client.channels.fetch(INFRACTIONS_CHANNEL_ID).catch(() => null) ||
+          interaction.channel;
 
         try {
           const infractCard = buildInfractionCard({
@@ -2070,6 +2071,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // /loa request <start> <end> <reason>
       if (interaction.commandName === 'loa') {
+        if (interaction.deferred || interaction.replied) return;
         await interaction.deferReply({ flags: 64 });
         const startInput = interaction.options.getString('start');
         const endInput = interaction.options.getString('end');
@@ -3191,7 +3193,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       if (interaction.customId.startsWith('cmd_page_next_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_next_', ''), 10) || 0;
-        const newPage = Math.min(3, curPage + 1);
+        const newPage = Math.min(4, curPage + 1);
         const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
         return interaction.update(payload);
       }

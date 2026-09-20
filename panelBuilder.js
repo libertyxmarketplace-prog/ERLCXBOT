@@ -544,7 +544,12 @@ const GUILD_COMMAND_MAPS = {
     application: '1550444075444998165',
     commands: '1550686187792900147',
     refont: '1550686187792900149',
-    media: '1550717056221978666'
+    media: '1550717056221978666',
+    department: '1551135473139847188',
+    staffdocs: '1551154053507977336',
+    promote: '1551154053507977337',
+    infract: '1551154053507977338',
+    loa: '1551154053507977339'
   },
   // Guild 2: 1530147023754367006
   '1530147023754367006': {
@@ -558,7 +563,12 @@ const GUILD_COMMAND_MAPS = {
     application: '1550444074023260240',
     commands: '1550686186178216078',
     refont: '1550686186178216080',
-    media: '1550717055261605918'
+    media: '1550717055261605918',
+    department: '1551135471914979388',
+    staffdocs: '1551154052174192740',
+    promote: '1551154052174192741',
+    infract: '1551154052174192742',
+    loa: '1551154052174192743'
   }
 };
 
@@ -602,7 +612,7 @@ export function getCommandMention(client, name, subcommand = '', guildId = null)
  * bottom banner image, and clean gray arrow pagination.
  */
 export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) {
-  const totalPages = 4;
+  const totalPages = 5;
   const safePage = Math.max(0, Math.min(totalPages - 1, page));
 
   const leftEmojiId = CONFIG.APPLICATIONS?.ARROW_LEFT_EMOJI_ID || '1550446757396348958';
@@ -612,6 +622,7 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
     'Support Desk & Ticket Operations',
     'ER:LC Live Sessions & Announcements',
     'Community Giveaways & Applications',
+    'Staff Administration & Governance',
     'Voice Channel Music & System Utilities'
   ];
 
@@ -659,6 +670,20 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
       `\`-gstart <time> <winners> <prize>\`  \`-gend\`  \`-greroll\``
     ].join('\n');
   } else if (safePage === 3) {
+    pageContent = [
+      `### Staff Administration & Governance`,
+      getCommandMention(client, 'staffdocs', 'panel', guildId),
+      getCommandMention(client, 'promote', '', guildId),
+      getCommandMention(client, 'infract', '', guildId),
+      getCommandMention(client, 'loa', 'request', guildId),
+      getCommandMention(client, 'department', 'panel', guildId),
+      '',
+      `**Staff Prefix Shortcuts**`,
+      `\`-staffdocs\`  \`-promote @user <role/rank> | [reason]\``,
+      `\`-infract @user <type> | <reason> | [proof]\``,
+      `\`-loa <duration or date> | <reason>\``
+    ].join('\n');
+  } else if (safePage === 4) {
     pageContent = [
       `### Voice Music & Utilities`,
       getCommandMention(client, 'commands', '', guildId),
