@@ -100,11 +100,19 @@ export const CONFIG = {
 
   // Welcome System Configuration
   WELCOME: {
+    ENABLED: false, // Set to true (or use -welcome on) to re-enable
     CHANNEL_ID: "1548147497854181397",
     NAVIGATE_CHANNEL_ID: "1544355964348801178",
     WELCOME_EMOJI: "<:welcome:1548529700731752478>",
     PEOPLE_EMOJI_ID: "1547025501703372820",
     PEOPLE_EMOJI_NAME: "People",
+    SERVER_NAME: "Orlando Roleplay"
+  },
+
+  // Departments System Configuration
+  DEPARTMENTS: {
+    ARROW_EMOJI: "<:Right_arrow:1550446417376448593>",
+    TOP_BANNER_PATH: "./assets/department_banner.png",
     SERVER_NAME: "Orlando Roleplay"
   }
 };

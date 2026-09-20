@@ -1,0 +1,343 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import {
+  AttachmentBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} from 'discord.js';
+import { CONFIG } from './config.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const DEPARTMENTS = [
+  {
+    id: 'opd',
+    name: 'Orlando Police Department',
+    file: 'dept_opd.png',
+    dmBanner: 'dm_banner_opd.png',
+    inviteUrl: 'https://discord.gg/ZH4k9zq3BZ',
+    emoji: '<:OrlandoPoliceDepartment:1551137354477994055>',
+    emojiObj: { id: '1551137354477994055', name: 'OrlandoPoliceDepartment' },
+    jurisdiction: 'City of Orlando & Municipal Patrols',
+    description:
+      'Join the Orlando Police Department and serve your community with integrity, professionalism, and pride. We are seeking dedicated individuals who are committed to public safety, teamwork, and making a positive impact. Start a rewarding career protecting and serving the citizens of Orlando. Apply today!'
+  },
+  {
+    id: 'ocso',
+    name: "Orange County Sheriff's Office",
+    file: 'dept_ocso.png',
+    dmBanner: 'dm_banner_ocso.png',
+    inviteUrl: 'https://discord.gg/E8gGEcUVa3',
+    emoji: '<:Orange_County:1551137313898111036>',
+    emojiObj: { id: '1551137313898111036', name: 'Orange_County' },
+    jurisdiction: 'Orange County & Unincorporated Areas',
+    description:
+      'Dedicated to preserving public safety across unincorporated Orange County and surrounding jurisdictions. Deputies perform county patrols, civil processing, tactical response, warrant services, and specialized operations. Join our dedicated law enforcement family today!'
+  },
+  {
+    id: 'ocfr',
+    name: 'Orange County Fire Rescue',
+    file: 'dept_ocfr.png',
+    dmBanner: 'dm_banner_ocfr.png',
+    inviteUrl: 'https://discord.gg/UCqXrvHFqh',
+    emoji: '<:Fire_Department:1551137271326179390>',
+    emojiObj: { id: '1551137271326179390', name: 'Fire_Department' },
+    jurisdiction: 'Countywide Fire Protection & Advanced EMS',
+    description:
+      'Orange County Fire Rescue is responsible for protecting the lives and property of our community. Dedicated to fire suppression, emergency medical services, technical rescues, and rapid emergency response across the county.'
+  },
+  {
+    id: 'fdot',
+    name: 'Florida Department of Transportation',
+    file: 'dept_fdot.png',
+    dmBanner: 'dm_banner_fdot.png',
+    inviteUrl: 'https://discord.gg/tKNpf3VSEY',
+    emoji: '<:FDOT:1551137205991383081>',
+    emojiObj: { id: '1551137205991383081', name: 'FDOT' },
+    jurisdiction: 'Statewide Highways & Incident Management',
+    description:
+      'Ensuring a safe, efficient, and reliable statewide highway transportation network. Road Rangers and FDOT personnel manage traffic incident management, road maintenance, construction zone safety, and active motorist assistance.'
+  }
+];
+
+/**
+ * Builds the Header Card (Top Banner + Overview)
+ */
+export function buildHeaderPayload() {
+  const bannerPath = path.join(__dirname, 'assets', 'department_banner.png');
+  const files = [];
+  let topBannerMediaUrl = null;
+
+  if (fs.existsSync(bannerPath)) {
+    files.push(new AttachmentBuilder(bannerPath, { name: 'department_banner.png' }));
+    topBannerMediaUrl = 'attachment://department_banner.png';
+  }
+
+  const arrowEmoji = CONFIG.DEPARTMENTS?.ARROW_EMOJI || '<:Right_arrow:1550446417376448593>';
+  const overviewList = DEPARTMENTS.map(d => `${arrowEmoji} ${d.emoji} | **${d.name}**`).join('\n');
+
+  const containerComponents = [];
+
+  if (topBannerMediaUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: topBannerMediaUrl
+          }
+        }
+      ]
+    });
+  }
+
+  containerComponents.push({
+    type: 10,
+    content:
+      `## Departments\n` +
+      `Orlando Roleplay currently has a total of 4 legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      overviewList
+  });
+
+  const v2Payload = {
+    flags: 32768,
+    components: [
+      {
+        type: 17,
+        components: containerComponents
+      }
+    ],
+    files
+  };
+
+  const fallbackEmbed = new EmbedBuilder()
+    .setColor(0x0a84fd)
+    .setTitle('Departments')
+    .setDescription(
+      `Orlando Roleplay currently has a total of 4 legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      overviewList
+    );
+
+  if (fs.existsSync(bannerPath)) {
+    fallbackEmbed.setImage('attachment://department_banner.png');
+  }
+
+  const fallbackPayload = {
+    embeds: [fallbackEmbed],
+    files
+  };
+
+  return { v2Payload, fallbackPayload };
+}
+
+/**
+ * Builds an individual Department Card (Section with Logo Thumbnail on right + Button with custom emoji inside).
+ */
+export function buildDepartmentCardPayload(dept) {
+  const deptPath = path.join(__dirname, 'assets', dept.file);
+  const files = [];
+
+  if (fs.existsSync(deptPath)) {
+    files.push(new AttachmentBuilder(deptPath, { name: dept.file }));
+  }
+
+  const v2Payload = {
+    flags: 32768,
+    components: [
+      {
+        type: 17,
+        components: [
+          {
+            type: 9, // Section
+            components: [
+              {
+                type: 10,
+                content: `### ${dept.name}\n${dept.description}`
+              }
+            ],
+            accessory: {
+              type: 11, // Thumbnail on the right
+              media: {
+                url: `attachment://${dept.file}`
+              }
+            }
+          },
+          {
+            type: 1, // Action Row inside the card
+            components: [
+              {
+                type: 2,
+                style: 2, // Secondary sleek gray
+                label: dept.name,
+                emoji: dept.emojiObj,
+                custom_id: `dept_btn_${dept.id}`
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    files
+  };
+
+  const fallbackEmbed = new EmbedBuilder()
+    .setColor(0x0a84fd)
+    .setTitle(dept.name)
+    .setDescription(dept.description)
+    .setThumbnail(`attachment://${dept.file}`);
+
+  const fallbackRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`dept_btn_${dept.id}`)
+      .setLabel(dept.name)
+      .setEmoji(dept.emojiObj)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const fallbackPayload = {
+    embeds: [fallbackEmbed],
+    components: [fallbackRow],
+    files
+  };
+
+  return { v2Payload, fallbackPayload };
+}
+
+/**
+ * Builds the Direct Message (DM) payload sent to a user when clicking a department button.
+ * Includes department banner, clean intro, information summary, and official Discord invite link button.
+ */
+export function buildDepartmentDmPayload(dept) {
+  const bannerPath = path.join(__dirname, 'assets', dept.dmBanner);
+  const files = [];
+
+  let bannerMediaUrl = null;
+  if (fs.existsSync(bannerPath)) {
+    files.push(new AttachmentBuilder(bannerPath, { name: dept.dmBanner }));
+    bannerMediaUrl = `attachment://${dept.dmBanner}`;
+  }
+
+  const containerComponents = [];
+
+  // Top Department Banner
+  if (bannerMediaUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: bannerMediaUrl
+          }
+        }
+      ]
+    });
+  }
+
+  // Simple, clean, and professional DM content
+  containerComponents.push({
+    type: 10,
+    content:
+      `## ${dept.emoji} ${dept.name}\n` +
+      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent Orlando Roleplay.\n\n` +
+      `### Quick Department Details\n` +
+      `> • **Jurisdiction:** ${dept.jurisdiction}\n` +
+      `> • **Status:** Open & Recruiting\n\n` +
+      `Click the button below to join the official **${dept.name}** Discord server to apply and begin your journey.`
+  });
+
+  // Action Row with Link Button
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 5, // Link Button
+        label: `Join ${dept.name} ↗`,
+        emoji: dept.emojiObj,
+        url: dept.inviteUrl
+      }
+    ]
+  });
+
+  const v2Payload = {
+    flags: 32768,
+    components: [
+      {
+        type: 17,
+        components: containerComponents
+      }
+    ],
+    files
+  };
+
+  const fallbackEmbed = new EmbedBuilder()
+    .setColor(0x0a84fd)
+    .setTitle(`${dept.name}`)
+    .setDescription(
+      `### ${dept.emoji} ${dept.name}\n` +
+      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent Orlando Roleplay.\n\n` +
+      `### Quick Department Details\n` +
+      `> • **Jurisdiction:** ${dept.jurisdiction}\n` +
+      `> • **Status:** Open & Recruiting\n\n` +
+      `Click the button below to join the official **${dept.name}** Discord server to apply and begin your journey.`
+    );
+
+  if (fs.existsSync(bannerPath)) {
+    fallbackEmbed.setImage(`attachment://${dept.dmBanner}`);
+  }
+
+  const fallbackRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setLabel(`Join ${dept.name} ↗`)
+      .setEmoji(dept.emojiObj)
+      .setURL(dept.inviteUrl)
+  );
+
+  const fallbackPayload = {
+    embeds: [fallbackEmbed],
+    components: [fallbackRow],
+    files
+  };
+
+  return { v2Payload, fallbackPayload };
+}
+
+/**
+ * Sends clean, properly formatted Department Panel cards into the channel.
+ */
+export async function postDepartmentPanel(channel) {
+  if (!channel || !channel.isTextBased()) {
+    throw new Error('Invalid channel provided.');
+  }
+
+  const headerData = buildHeaderPayload();
+  let headerMsg = null;
+  try {
+    headerMsg = await channel.send(headerData.v2Payload);
+  } catch {
+    headerMsg = await channel.send(headerData.fallbackPayload);
+  }
+
+  const deptMessageIds = {};
+
+  for (const dept of DEPARTMENTS) {
+    const cardData = buildDepartmentCardPayload(dept);
+    let deptMsg = null;
+    try {
+      deptMsg = await channel.send(cardData.v2Payload);
+    } catch {
+      deptMsg = await channel.send(cardData.fallbackPayload);
+    }
+    deptMessageIds[dept.id] = deptMsg.id;
+  }
+
+  return {
+    headerId: headerMsg.id,
+    departmentIds: deptMessageIds
+  };
+}

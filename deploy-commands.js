@@ -425,6 +425,155 @@ const commands = [
         .setDescription('Channel to post the media into (defaults to current channel)')
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('department')
+    .setDescription('Orlando Departments System')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(sub =>
+      sub
+        .setName('panel')
+        .setDescription('Send the official department information panel')
+        .addChannelOption(opt =>
+          opt
+            .setName('channel')
+            .setDescription('Channel to send department panel into (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
+        )
+    ),
+  new SlashCommandBuilder()
+    .setName('staffdocs')
+    .setDescription('Orlando Staff Documentation System')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(sub =>
+      sub
+        .setName('panel')
+        .setDescription('Send the official staff documentation hub with dropdown menu')
+        .addChannelOption(opt =>
+          opt
+            .setName('channel')
+            .setDescription('Channel to send documentation hub into (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
+        )
+    ),
+  new SlashCommandBuilder()
+    .setName('promote')
+    .setDescription('Announce an official staff member rank promotion')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addUserOption(opt =>
+      opt
+        .setName('user')
+        .setDescription('Staff member being promoted')
+        .setRequired(true)
+    )
+    .addRoleOption(opt =>
+      opt
+        .setName('role')
+        .setDescription('New Discord staff role to award to the member')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('rank')
+        .setDescription('New staff rank / title (if not selecting a role)')
+        .setRequired(false)
+    )
+    .addRoleOption(opt =>
+      opt
+        .setName('old_role')
+        .setDescription('Previous staff role to remove (optional)')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('old_rank')
+        .setDescription('Previous rank / title (optional)')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('reason')
+        .setDescription('Merits or reason for promotion (optional)')
+        .setRequired(false)
+    )
+    .addChannelOption(opt =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to post announcement into (defaults to #promotions or current)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('infract')
+    .setDescription('Issue and log an official staff disciplinary infraction')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addUserOption(opt =>
+      opt
+        .setName('user')
+        .setDescription('Staff member receiving the infraction')
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('type')
+        .setDescription('Infraction classification level')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Written Warning', value: 'Written Warning' },
+          { name: 'Strike 1', value: 'Strike 1' },
+          { name: 'Strike 2', value: 'Strike 2' },
+          { name: 'Strike 3', value: 'Strike 3' },
+          { name: 'Demotion', value: 'Demotion' },
+          { name: 'Suspension', value: 'Suspension' }
+        )
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('reason')
+        .setDescription('Violation reason or policy broken')
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('proof')
+        .setDescription('Link to evidence clip or case documentation (optional)')
+        .setRequired(false)
+    )
+    .addChannelOption(opt =>
+      opt
+        .setName('channel')
+        .setDescription('Channel to post infraction into (defaults to #infractions or current)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('loa')
+    .setDescription('Submit an official Leave of Absence request')
+    .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages)
+    .addSubcommand(sub =>
+      sub
+        .setName('request')
+        .setDescription('Submit a Leave of Absence request for management review')
+        .addStringOption(opt =>
+          opt
+            .setName('start')
+            .setDescription('Start date or timeframe (e.g. today, 2026-09-20)')
+            .setRequired(true)
+        )
+        .addStringOption(opt =>
+          opt
+            .setName('end')
+            .setDescription('End date or duration (e.g. 5 days, 1 week, 2026-09-27)')
+            .setRequired(true)
+        )
+        .addStringOption(opt =>
+          opt
+            .setName('reason')
+            .setDescription('Reason for your leave of absence')
+            .setRequired(true)
+        )
     )
 ].map(cmd => cmd.toJSON());
 

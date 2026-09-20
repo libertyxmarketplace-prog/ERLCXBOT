@@ -127,6 +127,27 @@ import {
   buildApplicationResultFallback,
   buildApplicationStatusDmV2
 } from './applicationManager.js';
+import {
+  postDepartmentPanel,
+  buildDepartmentDmPayload,
+  DEPARTMENTS
+} from './departmentManager.js';
+import {
+  buildStaffDocsHubPayload,
+  buildStaffDocSectionPayload
+} from './staffDocsManager.js';
+import {
+  buildPromotionCard,
+  buildInfractionCard
+} from './staffActionManager.js';
+import {
+  loadLoaRecords,
+  saveLoaRecords,
+  parseLoaDuration,
+  buildLoaSubmissionCard,
+  buildLoaStatusDm,
+  checkAndExpireLoas
+} from './loaManager.js';
 
 dotenv.config();
 
@@ -197,6 +218,45 @@ function formatDuration(startTimestamp, endTimestamp = Date.now()) {
   if (minutes > 0) parts.push(`${minutes}m`);
   if (parts.length === 0 || (seconds > 0 && days === 0)) parts.push(`${seconds}s`);
   return parts.join(' ');
+}
+
+/**
+ * Resolves a Discord role object and a clean human-readable rank name from user input.
+ * Prevents raw ID numbers or <@&...> strings from appearing in UI labels.
+ */
+function resolveRoleAndRank(guild, roleOption = null, rankString = null) {
+  let role = roleOption || null;
+  let rankName = '';
+
+  if (role) {
+    rankName = role.name;
+  } else if (rankString) {
+    const trimmed = rankString.trim();
+    // 1. Check for role mention <@&1234567890>
+    const mentionMatch = trimmed.match(/<@&(\d+)>/);
+    if (mentionMatch) {
+      role = guild.roles.cache.get(mentionMatch[1]) || null;
+      if (role) rankName = role.name;
+    }
+    // 2. Check for numeric role ID
+    if (!role && /^\d{17,20}$/.test(trimmed)) {
+      role = guild.roles.cache.get(trimmed) || null;
+      if (role) rankName = role.name;
+    }
+    // 3. Check for exact or case-insensitive role name match in guild
+    if (!role) {
+      role = guild.roles.cache.find(r => r.name.toLowerCase() === trimmed.toLowerCase()) || null;
+      if (role) {
+        rankName = role.name;
+      } else {
+        // Strip any residual mention syntax
+        rankName = trimmed.replace(/<@&?\d+>/g, '').trim() || trimmed;
+      }
+    }
+  }
+
+  if (!rankName) rankName = role ? role.name : 'Promoted Staff';
+  return { role, rankName };
 }
 
 /**
@@ -419,6 +479,7 @@ client.once(Events.ClientReady, async () => {
   await updateAllLivePanels(client);
   await updateAllSessionPanels(client);
   await ensureSessionOfflineState(client);
+  await checkAndExpireLoas(client);
   initMusicEngine();
 
   // Auto-refresh live session panels every 60 seconds
@@ -429,6 +490,15 @@ client.once(Events.ClientReady, async () => {
       console.warn('Session auto-update error:', e.message);
     }
   }, 60 * 1000);
+
+  // Check and expire active LOAs every 5 minutes
+  setInterval(async () => {
+    try {
+      await checkAndExpireLoas(client);
+    } catch (e) {
+      console.warn('LOA expiration check error:', e.message);
+    }
+  }, 5 * 60 * 1000);
 
   // Expire session votes older than 24 hours
   setInterval(async () => {
@@ -489,6 +559,10 @@ client.on(Events.ChannelDelete, async channel => {
 // Send Welcome Message when a new member joins
 client.on(Events.GuildMemberAdd, async member => {
   try {
+    if (CONFIG.WELCOME?.ENABLED === false) {
+      console.log(`[GuildMemberAdd] User ${member.user.tag} (${member.id}) joined, but welcome system is disabled.`);
+      return;
+    }
     const guild = member.guild;
     console.log(`[GuildMemberAdd] User ${member.user.tag} (${member.id}) joined ${guild.name} (${guild.id})`);
 
@@ -814,9 +888,19 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // -testwelcome / -welcome
+    // -testwelcome / -welcome [on/off]
     if (command === 'testwelcome' || command === 'welcome') {
       if (!isStaff(message.member)) return;
+
+      const subArg = args[0]?.toLowerCase();
+      if (subArg === 'off' || subArg === 'disable') {
+        CONFIG.WELCOME.ENABLED = false;
+        return sendCleanFeedback('🔇 Welcome system has been **disabled**.');
+      } else if (subArg === 'on' || subArg === 'enable') {
+        CONFIG.WELCOME.ENABLED = true;
+        return sendCleanFeedback('🔊 Welcome system has been **enabled**.');
+      }
+
       const GUILD_WELCOME_MAP = {
         '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397',
         '1530147023754367006': '1549635572698447932'
@@ -828,7 +912,20 @@ client.on(Events.MessageCreate, async message => {
 
       const payload = buildWelcomePayload(message.member);
       await targetChannel.send(payload);
-      return sendCleanFeedback(`Sent test welcome message to <#${targetChannel.id}>!`);
+      const statusNote = CONFIG.WELCOME?.ENABLED === false ? ' *(Note: System is currently turned off for new joins)*' : '';
+      return sendCleanFeedback(`Sent test welcome message to <#${targetChannel.id}>!${statusNote}`);
+    }
+
+    // -department [panel] [channel] / -departments
+    if (command === 'department' || command === 'departments') {
+      if (!isStaff(message.member)) return;
+      const targetChannel = message.mentions.channels.first() || message.channel;
+      try {
+        await postDepartmentPanel(targetChannel);
+        return sendCleanFeedback(`Successfully dispatched Department Panel to <#${targetChannel.id}>!`);
+      } catch (err) {
+        return sendCleanFeedback(`Failed to dispatch department panel: ${err.message}`);
+      }
     }
 
     // -say <message>
@@ -1135,6 +1232,208 @@ client.on(Events.MessageCreate, async message => {
       } else {
         return sendCleanFeedback('The bot is not currently in a voice channel.');
       }
+    }
+
+    // -loa [duration/end date] | [reason]
+    if (command === 'loa') {
+      const fullArgs = args.join(' ').trim();
+      if (!fullArgs || fullArgs.toLowerCase() === 'help') {
+        const helpEmbed = new EmbedBuilder()
+          .setTitle('Orlando Roleplay | Leave of Absence (LOA) Format')
+          .setDescription(
+            `> To submit an official Leave of Absence, please use the standard format:\n\n` +
+            `\`-loa <Duration or End Date> | <Reason>\`\n\n` +
+            `**Examples:**\n` +
+            `> • \`-loa 7 days | High school midterms and family trip\`\n` +
+            `> • \`-loa 1 week | Out of town for sports tournament\`\n` +
+            `> • \`-loa 2026-09-30 | Medical recovery and rest\`\n\n` +
+            `*Once submitted, your request will be dispatched to Staff Management in <#1548336007311527996> for review.*`
+          )
+          .setColor(0x0284c7)
+          .setFooter({ text: 'Orlando Roleplay Staff Administration • Leave System' });
+
+        return message.channel.send({ embeds: [helpEmbed] });
+      }
+
+      const parts = fullArgs.split('|').map(p => p.trim());
+      let durationInput = parts[0];
+      let reasonInput = parts[1];
+
+      if (!reasonInput && args.length >= 2) {
+        durationInput = args[0];
+        reasonInput = args.slice(1).join(' ');
+      }
+
+      if (!reasonInput) {
+        reasonInput = 'Personal leave / Unspecified obligations';
+      }
+
+      const now = Date.now();
+      const durationMs = parseLoaDuration(durationInput);
+      const startTimestamp = now;
+      const endTimestamp = startTimestamp + durationMs;
+
+      const loaId = `loa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const member = message.member;
+      const cleanName = (member.nickname || member.user.displayName || message.author.username)
+        .replace(/^[^\w\s]*LOA[^\w\s]*\s*\|\s*/i, '')
+        .replace(/^𝖫𝖮𝖠\s*\|\s*/i, '')
+        .trim();
+
+      const record = {
+        id: loaId,
+        userId: message.author.id,
+        userTag: message.author.tag || message.author.username,
+        guildId: message.guild.id,
+        originalNickname: cleanName,
+        startTimestamp,
+        endTimestamp,
+        reason: reasonInput,
+        status: 'pending',
+        createdAt: now
+      };
+
+      const store = loadLoaRecords();
+      if (!store.pending) store.pending = {};
+      store.pending[loaId] = record;
+
+      const logChannelId = '1548336007311527996';
+      let reviewSent = false;
+      try {
+        const logChannel = await client.channels.fetch(logChannelId).catch(() => null) ||
+          message.guild.channels.cache.find(c => c.name.toLowerCase().includes('loa') && c.isTextBased());
+        if (logChannel) {
+          const cardPayload = buildLoaSubmissionCard(record);
+          const reviewMsg = await logChannel.send(cardPayload);
+          record.reviewMessageId = reviewMsg.id;
+          record.reviewChannelId = logChannel.id;
+          reviewSent = true;
+        }
+      } catch (postErr) {
+        console.error('[LOA] Failed to post to LOA channel:', postErr);
+      }
+
+      saveLoaRecords(store);
+
+      await message.delete().catch(() => null);
+
+      const confirmEmbed = new EmbedBuilder()
+        .setDescription(
+          `> <@${message.author.id}>, your Leave of Absence request has been submitted to Staff Management in <#${logChannelId}>.\n` +
+          `> Scheduled Term: <t:${Math.floor(startTimestamp / 1000)}:d> to <t:${Math.floor(endTimestamp / 1000)}:d> (<t:${Math.floor(endTimestamp / 1000)}:R>). You will receive a Direct Message once reviewed.`
+        )
+        .setColor(0x0284c7);
+
+      const confirmMsg = await message.channel.send({ embeds: [confirmEmbed] });
+      setTimeout(() => confirmMsg.delete().catch(() => null), 8000);
+      return;
+    }
+
+    // -staffdocs [panel]
+    if (command === 'staffdocs' || command === 'staffdoc') {
+      if (!isStaff(message.member)) {
+        return sendCleanFeedback('You must be a staff member to use this command.');
+      }
+      try {
+        const payload = buildStaffDocsHubPayload();
+        await message.delete().catch(() => null);
+        return message.channel.send(payload);
+      } catch (err) {
+        console.error('Failed to post staff docs via prefix:', err);
+        return sendCleanFeedback(`Error: ${err.message}`);
+      }
+    }
+
+    // -promote @user <role/rank> | [reason]
+    if (command === 'promote') {
+      if (!isStaff(message.member)) {
+        return sendCleanFeedback('You must be a staff member to issue promotions.');
+      }
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        return sendCleanFeedback('Please mention a staff member: `-promote @user <Rank/Role> | [Reason]`');
+      }
+
+      // Check for mentioned role in message
+      const mentionedRole = message.mentions.roles.first();
+
+      const restArgs = args.filter(a => !a.startsWith('<@')).join(' ').trim();
+      const parts = restArgs.split('|').map(p => p.trim());
+      const rawRank = parts[0] || (mentionedRole ? mentionedRole.name : 'Promoted Staff');
+      const reason = parts[1] || 'Exemplary service and dedication';
+
+      const { role: newRole, rankName: newRank } = resolveRoleAndRank(message.guild, mentionedRole, rawRank);
+
+      // Automatically award role to member if found
+      if (newRole) {
+        try {
+          const member = await message.guild.members.fetch(targetUser.id).catch(() => null);
+          if (member) {
+            await member.roles.add(newRole);
+          }
+        } catch (err) {
+          console.warn(`[Promote] Could not assign role ${newRole.name}:`, err.message);
+        }
+      }
+
+      let targetChannel = message.guild.channels.cache.find(c =>
+        c.name.toLowerCase().includes('promotion') && c.isTextBased()
+      ) || message.channel;
+
+      try {
+        const promoCard = buildPromotionCard({
+          user: targetUser,
+          newRank,
+          oldRank: null,
+          reason,
+          promotedBy: message.author,
+          role: newRole
+        });
+        await message.delete().catch(() => null);
+        await targetChannel.send(promoCard);
+      } catch (err) {
+        console.error('Failed to post promotion via prefix:', err);
+        return sendCleanFeedback(`Error: ${err.message}`);
+      }
+      return;
+    }
+
+    // -infract @user <type> | <reason> | [proof]
+    if (command === 'infract') {
+      if (!isStaff(message.member)) {
+        return sendCleanFeedback('You must be a staff member to issue infractions.');
+      }
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        return sendCleanFeedback('Please mention a staff member: `-infract @user <Type> | <Reason> | [Proof]`');
+      }
+
+      const restArgs = args.filter(a => !a.startsWith('<@')).join(' ').trim();
+      const parts = restArgs.split('|').map(p => p.trim());
+      const type = parts[0] || 'Written Warning';
+      const reason = parts[1] || 'Failure to adhere to staff operational policy';
+      const proof = parts[2] || null;
+
+      let targetChannel = message.guild.channels.cache.get('1550413729013829725') ||
+        message.guild.channels.cache.find(c =>
+          c.name.toLowerCase().includes('infraction') && c.isTextBased()
+        ) || message.channel;
+
+      try {
+        const infractCard = buildInfractionCard({
+          user: targetUser,
+          type,
+          reason,
+          proof,
+          issuedBy: message.author
+        });
+        await message.delete().catch(() => null);
+        await targetChannel.send(infractCard);
+      } catch (err) {
+        console.error('Failed to post infraction via prefix:', err);
+        return sendCleanFeedback(`Error: ${err.message}`);
+      }
+      return;
     }
   } catch (err) {
     console.error('Error handling prefix command:', err);
@@ -1607,6 +1906,237 @@ client.on(Events.InteractionCreate, async interaction => {
         return;
       }
 
+      // /department panel [channel] | /departments [channel]
+      if (interaction.commandName === 'department' || interaction.commandName === 'departments') {
+        await interaction.deferReply({ flags: 64 });
+
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.editReply({
+            content: 'You must be a staff member or administrator to run this command.'
+          });
+        }
+
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+
+        try {
+          await postDepartmentPanel(targetChannel);
+          return interaction.editReply({
+            content: `Successfully dispatched the Department Panel to <#${targetChannel.id}>!`
+          });
+        } catch (err) {
+          console.error('Failed to post department panel:', err);
+          return interaction.editReply({
+            content: `Failed to dispatch department panel: ${err.message}`
+          });
+        }
+      }
+
+      // /staffdocs panel [channel]
+      if (interaction.commandName === 'staffdocs') {
+        await interaction.deferReply({ flags: 64 });
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.editReply({
+            content: 'You must be a staff member or administrator to run this command.'
+          });
+        }
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        try {
+          const payload = buildStaffDocsHubPayload();
+          await targetChannel.send(payload);
+          return interaction.editReply({
+            content: `Successfully dispatched the Staff Documentation Hub to <#${targetChannel.id}>!`
+          });
+        } catch (err) {
+          console.error('Failed to post staff documentation panel:', err);
+          return interaction.editReply({
+            content: `Failed to dispatch staff documentation hub: ${err.message}`
+          });
+        }
+      }
+
+      // /promote <user> [role] [rank] [old_role] [old_rank] [reason] [channel]
+      if (interaction.commandName === 'promote') {
+        await interaction.deferReply({ flags: 64 });
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.editReply({
+            content: 'You must be a staff member or administrator to issue promotions.'
+          });
+        }
+        const targetUser = interaction.options.getUser('user');
+        const roleOption = interaction.options.getRole('role');
+        const rankOption = interaction.options.getString('rank');
+        const oldRoleOption = interaction.options.getRole('old_role');
+        const oldRankOption = interaction.options.getString('old_rank');
+        const reason = interaction.options.getString('reason');
+
+        // Resolve new role and clean rank title
+        const { role: newRole, rankName: newRank } = resolveRoleAndRank(interaction.guild, roleOption, rankOption);
+        // Resolve previous role/rank if provided
+        const { role: oldRole, rankName: oldRank } = resolveRoleAndRank(interaction.guild, oldRoleOption, oldRankOption);
+
+        // Automatically assign new role to promoted member (and remove old role if specified)
+        let roleAwarded = false;
+        let roleError = null;
+        if (newRole) {
+          try {
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            if (member) {
+              await member.roles.add(newRole);
+              roleAwarded = true;
+              if (oldRole && member.roles.cache.has(oldRole.id)) {
+                await member.roles.remove(oldRole).catch(() => null);
+              }
+            }
+          } catch (err) {
+            console.warn(`[Promote] Could not assign role ${newRole.name}:`, err.message);
+            roleError = err.message;
+          }
+        }
+
+        let targetChannel = interaction.options.getChannel('channel');
+        if (!targetChannel) {
+          targetChannel = interaction.guild.channels.cache.find(c =>
+            c.name.toLowerCase().includes('promotion') && c.isTextBased()
+          ) || interaction.channel;
+        }
+
+        try {
+          const promoCard = buildPromotionCard({
+            user: targetUser,
+            newRank,
+            oldRank: oldRank !== 'Promoted Staff' ? oldRank : null,
+            reason,
+            promotedBy: interaction.user,
+            role: newRole
+          });
+          await targetChannel.send(promoCard);
+
+          let feedback = `Official promotion announcement for <@${targetUser.id}> dispatched to <#${targetChannel.id}>!`;
+          if (roleAwarded) {
+            feedback += `\nRole **${newRole.name}** was automatically awarded to <@${targetUser.id}>.`;
+          } else if (roleError) {
+            feedback += `\n*(Note: Role assignment failed: ${roleError}. Please verify bot role permissions)*`;
+          }
+
+          return interaction.editReply({ content: feedback });
+        } catch (err) {
+          console.error('Failed to post promotion announcement:', err);
+          return interaction.editReply({
+            content: `Failed to dispatch promotion card: ${err.message}`
+          });
+        }
+      }
+
+      // /infract <user> <type> <reason> [proof] [channel]
+      if (interaction.commandName === 'infract') {
+        await interaction.deferReply({ flags: 64 });
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.editReply({
+            content: 'You must be a staff member or administrator to log infractions.'
+          });
+        }
+        const targetUser = interaction.options.getUser('user');
+        const type = interaction.options.getString('type');
+        const reason = interaction.options.getString('reason');
+        const proof = interaction.options.getString('proof');
+
+        let targetChannel = interaction.options.getChannel('channel');
+        if (!targetChannel) {
+          targetChannel = interaction.guild.channels.cache.get('1550413729013829725') ||
+            interaction.guild.channels.cache.find(c =>
+              c.name.toLowerCase().includes('infraction') && c.isTextBased()
+            ) || interaction.channel;
+        }
+
+        try {
+          const infractCard = buildInfractionCard({
+            user: targetUser,
+            type,
+            reason,
+            proof,
+            issuedBy: interaction.user
+          });
+          await targetChannel.send(infractCard);
+          return interaction.editReply({
+            content: `Official infraction record (${type}) for <@${targetUser.id}> logged in <#${targetChannel.id}>!`
+          });
+        } catch (err) {
+          console.error('Failed to post infraction card:', err);
+          return interaction.editReply({
+            content: `Failed to dispatch infraction card: ${err.message}`
+          });
+        }
+      }
+
+      // /loa request <start> <end> <reason>
+      if (interaction.commandName === 'loa') {
+        await interaction.deferReply({ flags: 64 });
+        const startInput = interaction.options.getString('start');
+        const endInput = interaction.options.getString('end');
+        const reason = interaction.options.getString('reason');
+
+        const now = Date.now();
+        const durationMs = parseLoaDuration(endInput);
+        let startTimestamp = Date.parse(startInput);
+        if (isNaN(startTimestamp) || startTimestamp < now - 86400000) {
+          startTimestamp = now;
+        }
+        const endTimestamp = startTimestamp + durationMs;
+
+        const loaId = `loa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const member = interaction.member;
+        const cleanName = (member.nickname || member.user.displayName || member.user.username)
+          .replace(/^[^\w\s]*LOA[^\w\s]*\s*\|\s*/i, '')
+          .replace(/^𝖫𝖮𝖠\s*\|\s*/i, '')
+          .trim();
+
+        const record = {
+          id: loaId,
+          userId: interaction.user.id,
+          userTag: interaction.user.tag || interaction.user.username,
+          guildId: interaction.guildId,
+          originalNickname: cleanName,
+          startTimestamp,
+          endTimestamp,
+          reason,
+          status: 'pending',
+          createdAt: now
+        };
+
+        const store = loadLoaRecords();
+        if (!store.pending) store.pending = {};
+        store.pending[loaId] = record;
+
+        // Post to LOA review/log channel (1548336007311527996)
+        const logChannelId = '1548336007311527996';
+        let reviewSent = false;
+        try {
+          const logChannel = await client.channels.fetch(logChannelId).catch(() => null) ||
+            interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes('loa') && c.isTextBased());
+          if (logChannel) {
+            const cardPayload = buildLoaSubmissionCard(record);
+            const reviewMsg = await logChannel.send(cardPayload);
+            record.reviewMessageId = reviewMsg.id;
+            record.reviewChannelId = logChannel.id;
+            reviewSent = true;
+          }
+        } catch (postErr) {
+          console.error('[LOA] Failed to post to LOA channel:', postErr);
+        }
+
+        saveLoaRecords(store);
+
+        if (reviewSent) {
+          return interaction.editReply({
+            content: `Your Leave of Absence request has been submitted to Staff Management for review (<t:${Math.floor(startTimestamp / 1000)}:d> to <t:${Math.floor(endTimestamp / 1000)}:d>). You will receive a Direct Message once processed.`
+          });
+        } else {
+          return interaction.editReply({
+            content: `Leave of Absence request recorded, but could not dispatch to <#${logChannelId}>. Please ensure Staff Management reviews your request.`
+          });
+        }
+      }
+
       // /commands
       if (interaction.commandName === 'commands') {
         const payload = buildCommandsDirectoryPayload(client, 0, interaction.guildId);
@@ -1922,6 +2452,16 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 2. CATEGORY SELECT MENU (TICKET CREATION MODAL TRIGGER)                */
     /* ---------------------------------------------------------------------- */
     if (interaction.isStringSelectMenu()) {
+      // Staff Documentation Dropdown Selector (strictly zero emojis)
+      if (interaction.customId === 'staff_docs_select') {
+        const sectionId = interaction.values[0];
+        const payload = buildStaffDocSectionPayload(sectionId);
+        return interaction.reply({
+          ...payload,
+          ephemeral: true
+        });
+      }
+
       // Staff Application Position Selector
       if (interaction.customId === 'application_select_role') {
         const selectedRole = interaction.values[0]; // 'ingame_mod' or 'discord_mod'
@@ -2031,6 +2571,61 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 3. MODAL SUBMISSIONS                                                   */
     /* ---------------------------------------------------------------------- */
     if (interaction.isModalSubmit()) {
+      // LOA Denial Reason Modal Submit
+      if (interaction.customId.startsWith('modal_loa_deny_')) {
+        const loaId = interaction.customId.replace('modal_loa_deny_', '');
+        const notes = interaction.fields.getTextInputValue('deny_reason');
+
+        const store = loadLoaRecords();
+        const record = store.pending?.[loaId] || store.active?.[loaId];
+        if (!record) {
+          return interaction.reply({
+            content: 'LOA record not found or already processed.',
+            ephemeral: true
+          });
+        }
+
+        record.status = 'denied';
+        record.reviewedBy = interaction.user.id;
+        record.reviewedAt = Date.now();
+        record.notes = notes;
+
+        if (!store.history) store.history = {};
+        store.history[loaId] = record;
+        if (store.pending) delete store.pending[loaId];
+        saveLoaRecords(store);
+
+        // Update the submission message in review channel
+        if (record.reviewMessageId) {
+          try {
+            const ch = await client.channels.fetch(record.reviewChannelId || '1548336007311527996').catch(() => null);
+            if (ch) {
+              const msg = await ch.messages.fetch(record.reviewMessageId).catch(() => null);
+              if (msg) {
+                const updatedCard = buildLoaSubmissionCard(record);
+                await msg.edit(updatedCard).catch(() => null);
+              }
+            }
+          } catch (e) {}
+        }
+
+        // Send Denied DM to applicant
+        try {
+          const applicant = await client.users.fetch(record.userId).catch(() => null);
+          if (applicant) {
+            const dmPayload = buildLoaStatusDm({ record, status: 'denied', notes });
+            await applicant.send(dmPayload).catch(() => null);
+          }
+        } catch (dmErr) {
+          console.warn('[LOA] Could not DM applicant:', dmErr.message);
+        }
+
+        return interaction.reply({
+          content: `Leave of Absence request has been **DENIED** and applicant has been notified via Direct Message.`,
+          ephemeral: true
+        });
+      }
+
       // Handle Ticket Opening Modal
       if (interaction.customId.startsWith('modal_open_')) {
         const categoryId = interaction.customId.replace('modal_open_', '');
@@ -2485,6 +3080,107 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 4. BUTTON INTERACTIONS                                                 */
     /* ---------------------------------------------------------------------- */
     if (interaction.isButton()) {
+      // LOA Review Accept Button
+      if (interaction.customId.startsWith('loa_btn_accept_')) {
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.reply({
+            content: 'You do not have permission to review Leave of Absence requests.',
+            ephemeral: true
+          });
+        }
+        const loaId = interaction.customId.replace('loa_btn_accept_', '');
+        const store = loadLoaRecords();
+        const record = store.pending?.[loaId] || store.active?.[loaId];
+        if (!record) {
+          return interaction.reply({
+            content: 'LOA record not found or already processed.',
+            ephemeral: true
+          });
+        }
+        if (record.status !== 'pending') {
+          return interaction.reply({
+            content: `This LOA request has already been ${record.status}.`,
+            ephemeral: true
+          });
+        }
+
+        record.status = 'approved';
+        record.reviewedBy = interaction.user.id;
+        record.reviewedAt = Date.now();
+
+        // Move to active
+        if (!store.active) store.active = {};
+        store.active[loaId] = record;
+        if (store.pending) delete store.pending[loaId];
+        saveLoaRecords(store);
+
+        // Update nickname: change to 𝖫𝖮𝖠 | @his name stays
+        try {
+          const guild = interaction.guild;
+          const member = await guild.members.fetch(record.userId).catch(() => null);
+          if (member) {
+            const currentName = member.nickname || member.user.displayName || member.user.username;
+            const strippedName = currentName
+              .replace(/^[^\w\s]*LOA[^\w\s]*\s*\|\s*/i, '')
+              .replace(/^𝖫𝖮𝖠\s*\|\s*/i, '')
+              .trim();
+            record.originalNickname = strippedName;
+            const newNick = `𝖫𝖮𝖠 | ${strippedName}`.slice(0, 32);
+            await member.setNickname(newNick).catch(err => {
+              console.warn(`[LOA] Could not update nickname for ${member.user.tag}:`, err.message);
+            });
+            saveLoaRecords(store);
+          }
+        } catch (nickErr) {
+          console.error('[LOA] Error setting member nickname:', nickErr);
+        }
+
+        // Update card in review channel
+        const updatedCard = buildLoaSubmissionCard(record);
+        await interaction.update(updatedCard).catch(async () => {
+          if (interaction.message) await interaction.message.edit(updatedCard).catch(() => null);
+        });
+
+        // Send Approved DM to applicant
+        try {
+          const applicant = await client.users.fetch(record.userId).catch(() => null);
+          if (applicant) {
+            const dmPayload = buildLoaStatusDm({ record, status: 'approved' });
+            await applicant.send(dmPayload).catch(() => null);
+          }
+        } catch (dmErr) {
+          console.warn('[LOA] Could not send approval DM:', dmErr.message);
+        }
+        return;
+      }
+
+      // LOA Review Deny Button -> Show Denial Modal
+      if (interaction.customId.startsWith('loa_btn_deny_')) {
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.reply({
+            content: 'You do not have permission to review Leave of Absence requests.',
+            ephemeral: true
+          });
+        }
+        const loaId = interaction.customId.replace('loa_btn_deny_', '');
+        const modal = new ModalBuilder()
+          .setCustomId(`modal_loa_deny_${loaId}`)
+          .setTitle('Deny Leave of Absence');
+
+        const reasonInput = new TextInputBuilder()
+          .setCustomId('deny_reason')
+          .setLabel('Denial Reason / Justification')
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder('Provide reason for denying this Leave of Absence...')
+          .setMaxLength(500)
+          .setRequired(true);
+
+        const row = new ActionRowBuilder().addComponents(reasonInput);
+        modal.addComponents(row);
+        await interaction.showModal(modal);
+        return;
+      }
+
       // Commands Directory Pagination Buttons
       if (interaction.customId.startsWith('cmd_page_prev_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_prev_', ''), 10) || 0;
@@ -3329,6 +4025,46 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
         return;
+      }
+
+      // Department Buttons - Send Direct Message with department banner and invite link
+      if (interaction.customId.startsWith('dept_btn_')) {
+        const deptId = interaction.customId.replace('dept_btn_', '');
+        const dept = DEPARTMENTS.find(d => d.id === deptId);
+
+        if (!dept) {
+          return interaction.reply({
+            content: 'Department record not found.',
+            flags: 64
+          });
+        }
+
+        const dmData = buildDepartmentDmPayload(dept);
+        let dmSuccess = false;
+
+        try {
+          await interaction.user.send(dmData.v2Payload);
+          dmSuccess = true;
+        } catch {
+          try {
+            await interaction.user.send(dmData.fallbackPayload);
+            dmSuccess = true;
+          } catch (dmErr) {
+            console.warn(`Could not DM user ${interaction.user.tag}:`, dmErr.message);
+          }
+        }
+
+        if (dmSuccess) {
+          return interaction.reply({
+            content: `> 📬 **Direct Message Sent**\n-# Check your DMs for the **${dept.name}** invitation and details!`,
+            flags: 64
+          });
+        } else {
+          return interaction.reply({
+            content: `> ⚠️ **Could Not Send DM**\n-# Please enable **Direct Messages from server members** in your Privacy & Safety settings to receive department details. Alternatively, click here: [${dept.name} Server](${dept.inviteUrl})`,
+            flags: 64
+          });
+        }
       }
 
       // Category Buttons from Ticket Panel (General, Management)

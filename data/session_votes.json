@@ -11,7 +11,7 @@
       "durationLabel": "30 Minutes",
       "createdAt": 1789691346058,
       "expiresAt": 1789777746058,
-      "status": "active"
+      "status": "expired"
     },
     "vote_1789691663310": {
       "id": "vote_1789691663310",
@@ -95,7 +95,7 @@
       "durationLabel": "30 Minutes",
       "createdAt": 1789693119143,
       "expiresAt": 1789779519143,
-      "status": "active"
+      "status": "expired"
     },
     "vote_1789693183118": {
       "id": "vote_1789693183118",

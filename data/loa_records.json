@@ -1,0 +1,22 @@
+{
+  "active": {
+    "loa_1789894635963_35vg": {
+      "id": "loa_1789894635963_35vg",
+      "userId": "1535998488456859678",
+      "userTag": "eazyn3166",
+      "guildId": "1541210827967823955",
+      "originalNickname": "Susugoated1",
+      "startTimestamp": 1789894635963,
+      "endTimestamp": 1790499435963,
+      "reason": "Username: test Staff Rank: test Start Date: September 20 2026 End Date: September 20 2026 Reason for LOA: test",
+      "status": "approved",
+      "createdAt": 1789894635963,
+      "reviewMessageId": "1551155277825441885",
+      "reviewChannelId": "1548336007311527996",
+      "reviewedBy": "1535998488456859678",
+      "reviewedAt": 1789894666923
+    }
+  },
+  "history": {},
+  "pending": {}
+}
