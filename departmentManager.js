@@ -22,8 +22,8 @@ export const DEPARTMENTS = [
     file: 'dept_fhp.png',
     dmBanner: 'dept_fhp.png',
     inviteUrl: 'https://discord.gg/HANcqDBmG',
-    emoji: '<:FDOT:1551137205991383081>',
-    emojiObj: { id: '1551137205991383081', name: 'FDOT' },
+    emoji: '🚔',
+    emojiObj: { name: '🚔' },
     jurisdiction: 'Statewide Highways & Highway Safety',
     description:
       'Florida Highway Patrol is dedicated to ensuring safety, security, and order across Florida highways and state roadways. Troopers conduct traffic enforcement, accident investigations, commercial vehicle operations, and state-level emergency response.'
