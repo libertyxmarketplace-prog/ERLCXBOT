@@ -13,7 +13,38 @@ import { CONFIG } from './config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Active departments displayed on the public department panel (FHP and OCSO only)
 export const DEPARTMENTS = [
+  {
+    id: 'fhp',
+    aliases: ['fdot'],
+    name: 'Florida Highway Patrol',
+    file: 'dept_fhp.png',
+    dmBanner: 'dept_fhp.png',
+    inviteUrl: 'https://discord.gg/HANcqDBmG',
+    emoji: '<:FDOT:1551137205991383081>',
+    emojiObj: { id: '1551137205991383081', name: 'FDOT' },
+    jurisdiction: 'Statewide Highways & Highway Safety',
+    description:
+      'Florida Highway Patrol is dedicated to ensuring safety, security, and order across Florida highways and state roadways. Troopers conduct traffic enforcement, accident investigations, commercial vehicle operations, and state-level emergency response.'
+  },
+  {
+    id: 'ocso',
+    aliases: ['osco'],
+    name: "Orange County Sheriff's Office",
+    file: 'dept_ocso.png',
+    dmBanner: 'dm_banner_ocso.png',
+    inviteUrl: 'https://discord.gg/rJ3q5HGs',
+    emoji: '<:Orange_County:1551137313898111036>',
+    emojiObj: { id: '1551137313898111036', name: 'Orange_County' },
+    jurisdiction: 'Orange County & Unincorporated Areas',
+    description:
+      'Dedicated to preserving public safety across unincorporated Orange County and surrounding jurisdictions. Deputies perform county patrols, civil processing, tactical response, warrant services, and specialized operations. Join our dedicated law enforcement family today!'
+  }
+];
+
+// Preserved/inactive departments kept in reserve
+export const ARCHIVED_DEPARTMENTS = [
   {
     id: 'opd',
     name: 'Orlando Police Department',
@@ -27,18 +58,6 @@ export const DEPARTMENTS = [
       'Join the Orlando Police Department and serve your community with integrity, professionalism, and pride. We are seeking dedicated individuals who are committed to public safety, teamwork, and making a positive impact. Start a rewarding career protecting and serving the citizens of Orlando. Apply today!'
   },
   {
-    id: 'ocso',
-    name: "Orange County Sheriff's Office",
-    file: 'dept_ocso.png',
-    dmBanner: 'dm_banner_ocso.png',
-    inviteUrl: 'https://discord.gg/E8gGEcUVa3',
-    emoji: '<:Orange_County:1551137313898111036>',
-    emojiObj: { id: '1551137313898111036', name: 'Orange_County' },
-    jurisdiction: 'Orange County & Unincorporated Areas',
-    description:
-      'Dedicated to preserving public safety across unincorporated Orange County and surrounding jurisdictions. Deputies perform county patrols, civil processing, tactical response, warrant services, and specialized operations. Join our dedicated law enforcement family today!'
-  },
-  {
     id: 'ocfr',
     name: 'Orange County Fire Rescue',
     file: 'dept_ocfr.png',
@@ -49,20 +68,18 @@ export const DEPARTMENTS = [
     jurisdiction: 'Countywide Fire Protection & Advanced EMS',
     description:
       'Orange County Fire Rescue is responsible for protecting the lives and property of our community. Dedicated to fire suppression, emergency medical services, technical rescues, and rapid emergency response across the county.'
-  },
-  {
-    id: 'fdot',
-    name: 'Florida Department of Transportation',
-    file: 'dept_fdot.png',
-    dmBanner: 'dm_banner_fdot.png',
-    inviteUrl: 'https://discord.gg/tKNpf3VSEY',
-    emoji: '<:FDOT:1551137205991383081>',
-    emojiObj: { id: '1551137205991383081', name: 'FDOT' },
-    jurisdiction: 'Statewide Highways & Incident Management',
-    description:
-      'Ensuring a safe, efficient, and reliable statewide highway transportation network. Road Rangers and FDOT personnel manage traffic incident management, road maintenance, construction zone safety, and active motorist assistance.'
   }
 ];
+
+/**
+ * Resolves a department from active or archived departments by id or alias.
+ */
+export function findDepartment(deptId) {
+  return (
+    DEPARTMENTS.find(d => d.id === deptId || d.aliases?.includes(deptId)) ||
+    ARCHIVED_DEPARTMENTS.find(d => d.id === deptId || d.aliases?.includes(deptId))
+  );
+}
 
 /**
  * Builds the Header Card (Top Banner + Overview)
@@ -95,11 +112,12 @@ export function buildHeaderPayload() {
     });
   }
 
+  const deptCount = DEPARTMENTS.length;
   containerComponents.push({
     type: 10,
     content:
       `## Departments\n` +
-      `Orlando Roleplay currently has a total of 4 legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      `Orlando Roleplay currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
       overviewList
   });
 
@@ -118,7 +136,7 @@ export function buildHeaderPayload() {
     .setColor(0x0a84fd)
     .setTitle('Departments')
     .setDescription(
-      `Orlando Roleplay currently has a total of 4 legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      `Orlando Roleplay currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
       overviewList
     );
 

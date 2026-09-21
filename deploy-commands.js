@@ -443,6 +443,37 @@ const commands = [
         )
     ),
   new SlashCommandBuilder()
+    .setName('welcome')
+    .setDescription('Manage or test the Orlando Welcome system')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand(sub =>
+      sub
+        .setName('test')
+        .setDescription('Send a test welcome card into the welcome channel')
+        .addChannelOption(opt =>
+          opt
+            .setName('channel')
+            .setDescription('Optional specific channel to send test welcome into')
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('status')
+        .setDescription('Check whether the welcome system is currently enabled or disabled')
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('enable')
+        .setDescription('Enable the welcome system for new member joins')
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('disable')
+        .setDescription('Disable the welcome system for new member joins')
+    ),
+  new SlashCommandBuilder()
     .setName('staffdocs')
     .setDescription('Orlando Staff Documentation System')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)

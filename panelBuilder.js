@@ -677,11 +677,12 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
       getCommandMention(client, 'infract', '', guildId),
       getCommandMention(client, 'loa', 'request', guildId),
       getCommandMention(client, 'department', 'panel', guildId),
+      getCommandMention(client, 'welcome', 'test', guildId),
       '',
       `**Staff Prefix Shortcuts**`,
       `\`-staffdocs\`  \`-promote @user <role/rank> | [reason]\``,
       `\`-infract @user <type> | <reason> | [proof]\``,
-      `\`-loa <duration or date> | <reason>\``
+      `\`-loa <duration or date> | <reason>\`  \`-welcome [on/off]\``
     ].join('\n');
   } else if (safePage === 4) {
     pageContent = [

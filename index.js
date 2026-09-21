@@ -130,7 +130,8 @@ import {
 import {
   postDepartmentPanel,
   buildDepartmentDmPayload,
-  DEPARTMENTS
+  DEPARTMENTS,
+  findDepartment
 } from './departmentManager.js';
 import {
   buildStaffDocsHubPayload,
@@ -158,9 +159,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildEmojisAndStickers
   ],
-  partials: [Partials.Channel, Partials.Message]
+  partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User]
 });
 
 /**
@@ -579,13 +581,19 @@ client.on(Events.GuildMemberAdd, async member => {
     }
 
     if (!channel) {
-      channel = guild.channels.cache.find(c =>
-        c.isTextBased() && (
+      const fetched = await guild.channels.fetch().catch(() => guild.channels.cache);
+      channel = fetched?.find?.(c =>
+        c && c.isTextBased() && (
           c.name.toLowerCase().includes('welcome') ||
+          c.name.toLowerCase().includes('joins') ||
           c.name === '𝖬𝖺𝗂𝗇' ||
           c.name.toLowerCase() === 'main'
         )
       );
+    }
+
+    if (!channel && guild.systemChannel && guild.systemChannel.isTextBased()) {
+      channel = guild.systemChannel;
     }
 
     if (!channel) {
@@ -593,9 +601,27 @@ client.on(Events.GuildMemberAdd, async member => {
       return;
     }
 
-    const payload = buildWelcomePayload(member);
-    await channel.send(payload);
-    console.log(`[GuildMemberAdd] Sent welcome card to #${channel.name} in ${guild.name}`);
+    try {
+      const payload = buildWelcomePayload(member);
+      await channel.send(payload);
+      console.log(`[GuildMemberAdd] Sent welcome card to #${channel.name} in ${guild.name}`);
+    } catch (sendErr) {
+      console.warn(`[GuildMemberAdd] Primary welcome card failed (${sendErr.message}), sending resilient fallback...`);
+      const fallbackBtn = new ButtonBuilder()
+        .setCustomId('welcome_member_count')
+        .setStyle(ButtonStyle.Secondary)
+        .setLabel(`${(guild.memberCount || 1).toLocaleString()} Members`)
+        .setEmoji('👥')
+        .setDisabled(true);
+      const fallbackRow = new ActionRowBuilder().addComponents(fallbackBtn);
+      const navCh = CONFIG.WELCOME.NAVIGATE_CHANNEL_ID;
+      const navText = navCh && guild.channels.cache.has(navCh) ? ` Navigate the server through <#${navCh}>` : '';
+      await channel.send({
+        content: `👋 Welcome to ${guild.name || CONFIG.WELCOME.SERVER_NAME || 'Orlando Roleplay'}, <@${member.id}>.${navText}`,
+        components: [fallbackRow]
+      });
+      console.log(`[GuildMemberAdd] Resilient fallback welcome card sent to #${channel.name}`);
+    }
   } catch (err) {
     console.error('Error sending welcome message on guildMemberAdd:', err);
   }
@@ -1905,6 +1931,61 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
         return;
+      }
+
+      // /welcome [action: test/status/enable/disable] | /testwelcome
+      if (interaction.commandName === 'welcome' || interaction.commandName === 'testwelcome') {
+        await interaction.deferReply({ flags: 64 });
+
+        if (!isStaff(interaction.member, interaction)) {
+          return interaction.editReply({
+            content: 'You must be a staff member or administrator to run this command.'
+          });
+        }
+
+        const sub = interaction.options.getSubcommand?.(false);
+        if (sub === 'disable' || sub === 'off') {
+          CONFIG.WELCOME.ENABLED = false;
+          return interaction.editReply({
+            content: '🔇 Welcome system has been **disabled** for new joins.'
+          });
+        }
+        if (sub === 'enable' || sub === 'on') {
+          CONFIG.WELCOME.ENABLED = true;
+          return interaction.editReply({
+            content: '🔊 Welcome system has been **enabled** for new joins.'
+          });
+        }
+        if (sub === 'status') {
+          const status = CONFIG.WELCOME?.ENABLED ? '🟢 Enabled' : '🔴 Disabled';
+          return interaction.editReply({
+            content: `**Welcome System Status:** ${status}\nTarget Channel: <#${CONFIG.WELCOME.CHANNEL_ID}>`
+          });
+        }
+
+        // test subcommand or default
+        const GUILD_WELCOME_MAP = {
+          '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397',
+          '1530147023754367006': '1549635572698447932'
+        };
+        const preferredId = GUILD_WELCOME_MAP[interaction.guild.id] || CONFIG.WELCOME.CHANNEL_ID;
+        const targetChannel = interaction.options.getChannel?.('channel') ||
+          (preferredId ? interaction.guild.channels.cache.get(preferredId) : null) ||
+          interaction.channel;
+
+        try {
+          const payload = buildWelcomePayload(interaction.member);
+          await targetChannel.send(payload);
+          const statusNote = CONFIG.WELCOME?.ENABLED === false ? ' *(Note: Welcome system is currently turned off for new joins)*' : '';
+          return interaction.editReply({
+            content: `Successfully sent test welcome card to <#${targetChannel.id}>!${statusNote}`
+          });
+        } catch (err) {
+          console.error('Error sending test welcome:', err);
+          return interaction.editReply({
+            content: `Failed to send test welcome message: ${err.message}`
+          });
+        }
       }
 
       // /department panel [channel] | /departments [channel]
@@ -4032,7 +4113,7 @@ client.on(Events.InteractionCreate, async interaction => {
       // Department Buttons - Send Direct Message with department banner and invite link
       if (interaction.customId.startsWith('dept_btn_')) {
         const deptId = interaction.customId.replace('dept_btn_', '');
-        const dept = DEPARTMENTS.find(d => d.id === deptId);
+        const dept = findDepartment(deptId);
 
         if (!dept) {
           return interaction.reply({

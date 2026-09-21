@@ -100,7 +100,7 @@ export const CONFIG = {
 
   // Welcome System Configuration
   WELCOME: {
-    ENABLED: false, // Set to true (or use -welcome on) to re-enable
+    ENABLED: true, // Set to true (or use -welcome on / /welcome on) to re-enable
     CHANNEL_ID: "1548147497854181397",
     NAVIGATE_CHANNEL_ID: "1544355964348801178",
     WELCOME_EMOJI: "<:welcome:1548529700731752478>",
