@@ -63,119 +63,27 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // PAGE 1: BOT ACTIVATION • CORE CREDENTIALS & COMMUNITY (1/8)
     // ══════════════════════════════════════════════════════════════════════
     case 1: {
+      const srvName = cust.serverName || 'Not Set';
+      const joinCode = cust.joinCode || 'Not Set';
+      const statusText = bot.banned ? 'SUSPENDED' : 'ONLINE // OPERATIONAL';
+
       containerComponents.push({
         type: 10,
-        content: `### BOT ACTIVATION • CORE CREDENTIALS & COMMUNITY • 1/8\n> Bot instance authenticated and connected to Gateway.`
-      });
-
-      // Row: Bot Identifier
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: '**Bot Identifier**\n-# Assigned tenant identifier.'
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          label: bot.botId,
-          disabled: true,
-          custom_id: 'cfg_pill_id'
-        }
-      });
-
-      // Row: System Status
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: '**System Status**\n-# Current connection state on Gateway.'
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: bot.banned ? 4 : 3,
-          label: bot.banned ? 'Suspended' : 'Active & Online',
-          disabled: true,
-          custom_id: 'cfg_pill_status'
-        }
-      });
-
-      containerComponents.push({ type: 14, divider: true, spacing: 1 });
-
-      // Row: Discord Bot Token
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: '**Discord Bot Token**\n-# Authenticated bot credentials.'
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          label: maskSecret(bot.token),
-          disabled: true,
-          custom_id: 'cfg_pill_token'
-        }
-      });
-
-      // Row: ER:LC Server API Key
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: '**ER:LC Server API Key**\n-# Server link for in-game commands and logs.'
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          label: maskSecret(bot.erlcApiKey),
-          disabled: true,
-          custom_id: 'cfg_pill_erlckey'
-        }
-      });
-
-      // Row: Server Join Code
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Server Join Code**\n-# Private server direct join code: \`${cust.joinCode || 'Not Set'}\``
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          label: cust.joinCode ? cust.joinCode.slice(0, 16) : 'Not Set',
-          disabled: true,
-          custom_id: 'cfg_pill_joincode'
-        }
-      });
-
-      // Row: Community Server Name
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Community Server Name**\n-# Display branding across tickets and operations: **${cust.serverName || 'Not Set'}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          label: (cust.serverName || 'Not Set').slice(0, 32),
-          disabled: true,
-          custom_id: 'cfg_pill_srvname'
-        }
+        content: [
+          `# SYSTEM CONTROL CONSOLE`,
+          `### BOT ACTIVATION • CORE CREDENTIALS & COMMUNITY • PAGE 1/8`,
+          `\`\`\`ini`,
+          `[SYSTEM TELEMETRY]`,
+          `TENANT_ID        = ${bot.botId}`,
+          `GATEWAY_STATUS   = ${statusText}`,
+          `DISCORD_TOKEN    = ${maskSecret(bot.token)}`,
+          `ERLC_API_KEY     = ${maskSecret(bot.erlcApiKey)}`,
+          `SERVER_JOIN_CODE = ${joinCode}`,
+          `COMMUNITY_NAME   = ${srvName}`,
+          `\`\`\``,
+          `> **Instance Authentication**: Connected to Discord Gateway with active session credentials.`,
+          `> **Server Identity**: Community server branding and direct in-game join code applied across operations.`
+        ].join('\n')
       });
 
       containerComponents.push({ type: 14, divider: true, spacing: 1 });
@@ -215,36 +123,42 @@ export function buildConfigPanelPayload(botId, page = 1) {
         ? cust.ticketCategories
         : defaultCategories;
 
-      containerComponents.push({
-        type: 10,
-        content: `### TICKET SYSTEM • CATEGORIES & ROUTING • 2/8\n> Manage dynamic category buttons (no emojis), channel spawn folders, and staff alert roles.`
-      });
+      const catLines = categories.map((c, i) => {
+        const num = String(i + 1).padStart(2, '0');
+        const name = (c.name || `Category ${i + 1}`).padEnd(16, ' ').slice(0, 16);
+        const spawnStatus = c.spawnCategoryId ? 'CUSTOM FOLDER' : 'DEFAULT/ROOT';
+        const pingStatus = c.pingRoleId ? 'ROLE ATTACHED' : 'FALLBACK ROLE';
+        return `${num} | ${name} | SPAWN: ${spawnStatus.padEnd(14, ' ')} | PING: ${pingStatus}`;
+      }).join('\n');
+
+      const transChannel = cust.transcriptsChannelId ? `<#${cust.transcriptsChannelId}>` : '*Not Configured*';
+      const defCategory = cust.ticketCategoryId ? `<#${cust.ticketCategoryId}>` : '*Server Root*';
+      const defPing = cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}>` : '*None*';
+
+      const catMentions = categories.map((c, i) => {
+        const spawn = c.spawnCategoryId ? `<#${c.spawnCategoryId}>` : (cust.ticketCategoryId ? `<#${cust.ticketCategoryId}> (Fallback)` : '*Server Root*');
+        const ping = c.pingRoleId ? `<@&${c.pingRoleId}>` : (cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}> (Fallback)` : '*None*');
+        return `> **[${i + 1}] ${c.name || `Category ${i + 1}`}** -> Folder: ${spawn} | Alert: ${ping}`;
+      }).join('\n');
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ TICKET CATEGORY BUTTONS`,
-          ...categories.map((c, i) => {
-            const spawnText = c.spawnCategoryId ? `<#${c.spawnCategoryId}>` : (cust.ticketCategoryId ? `<#${cust.ticketCategoryId}> (Fallback)` : '*Server Root*');
-            const pingText = c.pingRoleId ? `<@&${c.pingRoleId}>` : (cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}> (Fallback)` : '*None*');
-            return `> **${i + 1}. [ ${c.name || `Category ${i + 1}`} ]**\n>    └ **Spawn:** ${spawnText} • **Ping Role:** ${pingText}`;
-          }),
+          `# TICKET ROUTING & DISPATCH CONTROLLER`,
+          `### TICKET SYSTEM • CATEGORIES & ROUTING • PAGE 2/8`,
+          `\`\`\`ini`,
+          `[TICKET CATEGORY ROUTING MATRIX]`,
+          catLines,
+          `\`\`\``,
+          catMentions,
           ``,
-          `### ◈ TRANSCRIPTS & DEFAULT ROUTING`,
-          `> **Transcripts Channel:** ${cust.transcriptsChannelId ? `<#${cust.transcriptsChannelId}>` : '*Not Configured*'}`,
-          `> **Default Ticket Category:** ${cust.ticketCategoryId ? `<#${cust.ticketCategoryId}>` : '*None*'}`,
-          `> **Default Ping Role:** ${cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}>` : '*None*'}`,
-          ``,
-          `### ◈ TICKET PANEL BANNERS & TEXT`,
-          `> **Panel Title:** **${cust.panelTitle || 'Support'}**`,
-          `> **Top Banner:** ${cust.topBannerUrl ? `[Custom Banner](${cust.topBannerUrl})` : '*Default Clean*'}`,
-          `> **Bottom Strip:** ${cust.bottomBannerUrl ? `[Custom Strip](${cust.bottomBannerUrl})` : '*Default Strip*'}`
+          `> **Transcripts**: ${transChannel} | **Default Folder**: ${defCategory} | **Default Ping**: ${defPing}`,
+          `> **Panel Title**: **${cust.panelTitle || 'Support'}** | **Top Banner**: ${cust.topBannerUrl ? '[Configured]' : '[Default Clean]'} | **Bottom Strip**: ${cust.bottomBannerUrl ? '[Configured]' : '[Default Clean]'}`
         ].join('\n')
       });
 
       containerComponents.push({ type: 14, divider: true, spacing: 1 });
 
-      // First Row: Category Configuration (Names, Spawns, Pings)
       containerComponents.push({
         type: 1,
         components: [
@@ -269,7 +183,6 @@ export function buildConfigPanelPayload(botId, page = 1) {
         ]
       });
 
-      // Second Row: Banners & Support Message
       containerComponents.push({
         type: 1,
         components: [
@@ -294,31 +207,38 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // PAGE 3: ER:LC LIVE OPERATIONS & SESSIONS (3/8)
     // ══════════════════════════════════════════════════════════════════════
     case 3: {
-      containerComponents.push({
-        type: 10,
-        content: `### ER:LC LIVE OPERATIONS & SESSIONS • 3/8\n> Private server patrol announcements, voice channels, banners, and announcement embed text.`
-      });
+      const sessChannel = cust.sessionChannelId ? `<#${cust.sessionChannelId}>` : '*Not Configured*';
+      const ingameVc = cust.ingameVcId ? `<#${cust.ingameVcId}>` : '*Not Configured*';
+      const queueVc = cust.queueVcId ? `<#${cust.queueVcId}>` : '*Not Configured*';
+      const notifyRole = cust.notificationRoleId ? `<@&${cust.notificationRoleId}>` : '*Not Configured*';
+      const hostRole = cust.hostRoleId ? `<@&${cust.hostRoleId}>` : '*Not Configured*';
+
+      const sStartTitle = cust.sessionStartTitle || 'SESSION STARTING';
+      const sStartDesc = (cust.sessionStartDesc || 'The session vote has succeeded and operations are now commencing.').slice(0, 75);
+      const sShutTitle = cust.sessionShutdownTitle || 'SESSION CONCLUDED';
+      const sShutDesc = (cust.sessionShutdownDesc || 'The session has concluded. Thank you for attending today\'s operations.').slice(0, 75);
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ LIVE OPERATION CHANNELS & ROLES`,
-          `> **Session Announcements:** ${cust.sessionChannelId ? `<#${cust.sessionChannelId}>` : '*Not Configured*'}`,
-          `> **In-Game Voice Channel:** ${cust.ingameVcId ? `<#${cust.ingameVcId}>` : '*Not Configured*'}`,
-          `> **Queue Voice Channel:** ${cust.queueVcId ? `<#${cust.queueVcId}>` : '*Not Configured*'}`,
-          `> **Staff Notification Role:** ${cust.notificationRoleId ? `<@&${cust.notificationRoleId}>` : '*Not Configured*'}`,
-          `> **Session Host / Staff Role:** ${cust.hostRoleId ? `<@&${cust.hostRoleId}>` : '*Not Configured*'}`,
-          ``,
-          `### ◈ PATROL BANNERS`,
-          `> **Session Live Banner:** ${cust.sessionTopBannerUrl ? `[Custom Header](${cust.sessionTopBannerUrl})` : '*Default Header*'}`,
-          `> **Session Shutdown Banner:** ${cust.sessionShutdownBannerUrl ? `[Custom Shutdown](${cust.sessionShutdownBannerUrl})` : '*Default Shutdown*'}`,
-          `> **Session Bottom Accent:** ${cust.sessionBottomBannerUrl ? `[Custom Strip](${cust.sessionBottomBannerUrl})` : '*Default Strip*'}`,
-          ``,
-          `### ◈ CUSTOM ANNOUNCEMENT EMBED TEXT`,
-          `> **Startup Header:** \`${cust.sessionStartTitle || 'SESSION STARTING'}\``,
-          `> **Startup Body:** \`${(cust.sessionStartDesc || 'The session vote has succeeded...').slice(0, 80)}...\``,
-          `> **Shutdown Header:** \`${cust.sessionShutdownTitle || 'SESSION CONCLUDED'}\``,
-          `> **Shutdown Body:** \`${(cust.sessionShutdownDesc || 'The session has concluded...').slice(0, 80)}...\``
+          `# EMERGENCY RESPONSE OPERATIONS DISPATCH`,
+          `### ER:LC LIVE OPERATIONS & SESSIONS • PAGE 3/8`,
+          `\`\`\`ini`,
+          `[OPERATIONS COMMUNICATIONS MATRIX]`,
+          `ANNOUNCEMENTS_CHANNEL = ${cust.sessionChannelId ? 'CONFIGURED' : 'NOT SET'}`,
+          `INGAME_RADIO_VOICE    = ${cust.ingameVcId ? 'CONFIGURED' : 'NOT SET'}`,
+          `QUEUE_STAGING_VOICE   = ${cust.queueVcId ? 'CONFIGURED' : 'NOT SET'}`,
+          `DUTY_ALERT_ROLE       = ${cust.notificationRoleId ? 'ATTACHED' : 'NOT SET'}`,
+          `SESSION_COMMAND_ROLE  = ${cust.hostRoleId ? 'ATTACHED' : 'NOT SET'}`,
+          `STARTUP_HEADLINE      = ${sStartTitle}`,
+          `SHUTDOWN_HEADLINE     = ${sShutTitle}`,
+          `\`\`\``,
+          `> **Operations Channels**: Announcements: ${sessChannel}`,
+          `> **Voice Frequencies**: Radio VC: ${ingameVc} | Queue VC: ${queueVc}`,
+          `> **Operations Command**: Host Role: ${hostRole} | Duty Alert: ${notifyRole}`,
+          `> **Startup Dispatch**: **${sStartTitle}** - *${sStartDesc}...*`,
+          `> **Shutdown Dispatch**: **${sShutTitle}** - *${sShutDesc}...*`,
+          `> **Visual Assets**: Live Banner: ${cust.sessionTopBannerUrl ? '[Active]' : '[Default]'} | Shutdown: ${cust.sessionShutdownBannerUrl ? '[Active]' : '[Default]'}`
         ].join('\n')
       });
 
@@ -357,24 +277,28 @@ export function buildConfigPanelPayload(botId, page = 1) {
       const infractBanner = cust.infractionBannerUrl || cust.infractBannerUrl;
       const promoteBanner = cust.promotionBannerUrl || cust.promoteBannerUrl;
 
-      containerComponents.push({
-        type: 10,
-        content: `### MODERATION SYSTEM • INFRACTIONS & PROMOTIONS • 4/8\n> Automated role assignment, penalty management, promotions, and panel graphics.`
-      });
+      const infractChan = cust.infractionsChannelId ? `<#${cust.infractionsChannelId}>` : '*Not Configured*';
+      const promoteChan = cust.promotionsChannelId ? `<#${cust.promotionsChannelId}>` : '*Not Configured*';
+      const remRole = cust.infractRemoveRoleId ? `<@&${cust.infractRemoveRoleId}>` : '*None*';
+      const giveRole = cust.infractGiveRoleId ? `<@&${cust.infractGiveRoleId}>` : '*None*';
+      const promoGiveRole = cust.promotionGiveRoleId ? `<@&${cust.promotionGiveRoleId}>` : '*None*';
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ INFRACTION SYSTEM`,
-          `> **Infractions Channel:** ${cust.infractionsChannelId ? `<#${cust.infractionsChannelId}>` : '*Not Configured*'}`,
-          `> **Infraction Banner:** ${infractBanner ? `[Custom Banner](${infractBanner})` : '*Default Header*'}`,
-          `> **Role Removed on Infraction:** ${cust.infractRemoveRoleId ? `<@&${cust.infractRemoveRoleId}>` : '*None*'}`,
-          `> **Role Given on Infraction:** ${cust.infractGiveRoleId ? `<@&${cust.infractGiveRoleId}>` : '*None*'}`,
-          ``,
-          `### ◈ PROMOTION SYSTEM`,
-          `> **Promotions Channel:** ${cust.promotionsChannelId ? `<#${cust.promotionsChannelId}>` : '*Not Configured*'}`,
-          `> **Promotion Banner:** ${promoteBanner ? `[Custom Banner](${promoteBanner})` : '*Default Header*'}`,
-          `> **Role Given on Promotion:** ${cust.promotionGiveRoleId ? `<@&${cust.promotionGiveRoleId}>` : '*None*'}`
+          `# MODERATION & DISCIPLINARY DIRECTORY`,
+          `### MODERATION SYSTEM • INFRACTIONS & PROMOTIONS • PAGE 4/8`,
+          `\`\`\`ini`,
+          `[INFRACTIONS & PROMOTIONS MATRIX]`,
+          `INFRACTIONS_CHANNEL = ${cust.infractionsChannelId ? 'CONFIGURED' : 'NOT SET'}`,
+          `PROMOTIONS_CHANNEL  = ${cust.promotionsChannelId ? 'CONFIGURED' : 'NOT SET'}`,
+          `PENALTY_REMOVE_ROLE = ${cust.infractRemoveRoleId ? 'ROLE SET' : 'NONE'}`,
+          `PENALTY_ASSIGN_ROLE = ${cust.infractGiveRoleId ? 'ROLE SET' : 'NONE'}`,
+          `PROMOTION_RANK_ROLE = ${cust.promotionGiveRoleId ? 'ROLE SET' : 'NONE'}`,
+          `\`\`\``,
+          `> **Infraction Routing**: Channel: ${infractChan} | Removed: ${remRole} | Given: ${giveRole}`,
+          `> **Promotion Routing**: Channel: ${promoteChan} | Promotion Role: ${promoGiveRole}`,
+          `> **Visual Assets**: Infraction Banner: ${infractBanner ? '[Active]' : '[Default]'} | Promotion Banner: ${promoteBanner ? '[Active]' : '[Default]'}`
         ].join('\n')
       });
 
@@ -404,25 +328,25 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // PAGE 5: STAFF APPLICATIONS & IN-GAME QUIZ (5/8)
     // ══════════════════════════════════════════════════════════════════════
     case 5: {
-      containerComponents.push({
-        type: 10,
-        content: `### STAFF APPLICATIONS & IN-GAME QUIZ • 5/8\n> Staff review workflow, acceptance announcements, application panel text, and quiz instructions.`
-      });
+      const revChannel = cust.reviewChannelId ? `<#${cust.reviewChannelId}>` : '*Default Channel*';
+      const resChannel = cust.resultsChannelId ? `<#${cust.resultsChannelId}>` : '*Default Channel*';
+      const quizIntro = (cust.appQuizIntroText || 'Welcome to the in-game quiz!').slice(0, 75);
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ DESTINATION CHANNELS`,
-          `> **Staff Review Channel:** ${cust.reviewChannelId ? `<#${cust.reviewChannelId}>` : '*Default Channel*'}`,
-          `> **Public Results Channel:** ${cust.resultsChannelId ? `<#${cust.resultsChannelId}>` : '*Default Channel*'}`,
-          ``,
-          `### ◈ APPLICATION PANEL BANNERS & TEXT`,
-          `> **Panel Title:** **${cust.appTitle || 'Staff Application'}**`,
-          `> **Top Banner:** ${cust.appTopBannerUrl ? `[Custom Banner](${cust.appTopBannerUrl})` : '*Default Header*'}`,
-          `> **Bottom Strip:** ${cust.appBottomBannerUrl ? `[Custom Strip](${cust.appBottomBannerUrl})` : '*Default Strip*'}`,
-          ``,
-          `### ◈ IN-GAME QUIZ INTRO`,
-          `> **Quiz Intro Text:** \`${(cust.appQuizIntroText || 'Welcome to the in-game quiz!').slice(0, 80)}...\``
+          `# RECRUITMENT & ASSESSMENT CONSOLE`,
+          `### STAFF APPLICATIONS & IN-GAME QUIZ • PAGE 5/8`,
+          `\`\`\`ini`,
+          `[APPLICATION & QUIZ TELEMETRY]`,
+          `REVIEW_CHANNEL     = ${cust.reviewChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
+          `RESULTS_CHANNEL    = ${cust.resultsChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
+          `APPLICATION_TITLE  = ${cust.appTitle || 'Staff Application'}`,
+          `QUIZ_WORKFLOW      = ACTIVE`,
+          `\`\`\``,
+          `> **Intake Routing**: Submissions Review: ${revChannel} | Announcements: ${resChannel}`,
+          `> **Quiz Intro**: *"${quizIntro}..."*`,
+          `> **Visual Assets**: Top Banner: ${cust.appTopBannerUrl ? '[Active]' : '[Default]'} | Bottom Strip: ${cust.appBottomBannerUrl ? '[Active]' : '[Default]'}`
         ].join('\n')
       });
 
@@ -452,25 +376,24 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // PAGE 6: SERVER DOCUMENTATION & POLICIES (6/8)
     // ══════════════════════════════════════════════════════════════════════
     case 6: {
-      containerComponents.push({
-        type: 10,
-        content: `### SERVER DOCUMENTATION & POLICIES • 6/8\n> Dedicated channels and banners for Department Info, Community Regulations, and Staff Documentation.`
-      });
+      const deptChan = cust.deptChannelId ? `<#${cust.deptChannelId}>` : '*Not Configured*';
+      const regChan = cust.regulationsChannelId ? `<#${cust.regulationsChannelId}>` : '*Server Default*';
+      const staffChan = cust.staffDocsChannelId ? `<#${cust.staffDocsChannelId}>` : '*Not Configured*';
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ DEPARTMENT PANEL`,
-          `> **Channel:** ${cust.deptChannelId ? `<#${cust.deptChannelId}>` : '*Not Configured*'}`,
-          `> **Top Banner:** ${cust.deptBannerUrl ? `[Custom Banner](${cust.deptBannerUrl})` : '*Not Set*'}`,
-          ``,
-          `### ◈ REGULATIONS PANEL`,
-          `> **Channel:** ${cust.regulationsChannelId ? `<#${cust.regulationsChannelId}>` : '*Server Default*'}`,
-          `> **Top Banner:** ${cust.regulationsBannerUrl ? `[Custom Banner](${cust.regulationsBannerUrl})` : '*Not Set*'}`,
-          ``,
-          `### ◈ STAFF DOCUMENTATION`,
-          `> **Channel:** ${cust.staffDocsChannelId ? `<#${cust.staffDocsChannelId}>` : '*Not Configured*'}`,
-          `> **Bottom Strip:** ${cust.staffDocsBottomBannerUrl ? `[Custom Strip](${cust.staffDocsBottomBannerUrl})` : '*Not Set*'}`
+          `# COMMUNITY DOCUMENTATION & REGULATORY VAULT`,
+          `### SERVER DOCUMENTATION & POLICIES • PAGE 6/8`,
+          `\`\`\`ini`,
+          `[SERVER DOCUMENTATION MATRIX]`,
+          `DEPARTMENT_PANEL_CHANNEL = ${cust.deptChannelId ? 'CONFIGURED' : 'NOT SET'}`,
+          `REGULATIONS_CHANNEL      = ${cust.regulationsChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
+          `STAFF_DOCS_CHANNEL       = ${cust.staffDocsChannelId ? 'CONFIGURED' : 'NOT SET'}`,
+          `\`\`\``,
+          `> **Department Directory**: Channel: ${deptChan} | Header: ${cust.deptBannerUrl ? '[Active]' : '[Not Set]'}`,
+          `> **Community Regulations**: Channel: ${regChan} | Header: ${cust.regulationsBannerUrl ? '[Active]' : '[Not Set]'}`,
+          `> **Staff Documentation**: Channel: ${staffChan} | Strip: ${cust.staffDocsBottomBannerUrl ? '[Active]' : '[Not Set]'}`
         ].join('\n')
       });
 
@@ -495,38 +418,22 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // ══════════════════════════════════════════════════════════════════════
     case 7: {
       const isWelcomeOn = Boolean(cust.welcomeEnabled);
-
-      containerComponents.push({
-        type: 10,
-        content: `### WELCOME SYSTEM • 7/8\n> Automated greetings, member counters, and custom welcome channels for new joins.`
-      });
-
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: '**Welcome System Status**\n-# Toggle automated greetings for new members.'
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: isWelcomeOn ? 3 : 4,
-          label: isWelcomeOn ? 'Enabled' : 'Disabled',
-          disabled: true,
-          custom_id: 'cfg_pill_welcomestat'
-        }
-      });
+      const welcomeChan = cust.welcomeChannelId ? `<#${cust.welcomeChannelId}>` : '*Server Default*';
+      const welcomeMsg = cust.welcomeText || 'Welcome to {server}, {user}! Enjoy your stay.';
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ WELCOME SETTINGS`,
-          `> **Target Channel:** ${cust.welcomeChannelId ? `<#${cust.welcomeChannelId}>` : '*Server Default Main Channel*'}`,
-          `> **Welcome Card Banner:** ${cust.welcomeBannerUrl ? `[Custom Image](${cust.welcomeBannerUrl})` : '*Clean / None*'}`,
-          ``,
-          `### ◈ MESSAGE TEMPLATE`,
-          `> ${cust.welcomeText || "Welcome to {server}, {user}! Navigate through the channels and enjoy your stay."}`
+          `# AUTOMATED ARRIVALS & GUEST INDUCTION`,
+          `### WELCOME SYSTEM • PAGE 7/8`,
+          `\`\`\`ini`,
+          `[WELCOME SYSTEM TELEMETRY]`,
+          `STATUS          = ${isWelcomeOn ? 'ACTIVE // BROADCASTING' : 'DISABLED // DORMANT'}`,
+          `TARGET_CHANNEL  = ${cust.welcomeChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
+          `CARD_GRAPHIC    = ${cust.welcomeBannerUrl ? 'CUSTOM IMAGE' : 'CLEAN / NONE'}`,
+          `\`\`\``,
+          `> **Induction Channel**: Target: ${welcomeChan}`,
+          `> **Welcome Template**: *"${welcomeMsg}"*`
         ].join('\n')
       });
 
@@ -556,55 +463,23 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // PAGE 8: AI CONFIGURATION ASSISTANT (8/8)
     // ══════════════════════════════════════════════════════════════════════
     case 8: {
-      containerComponents.push({
-        type: 10,
-        content: `### AI CONFIGURATION ASSISTANT • 8/8\n> Natural language automation for configuring bot settings without navigating forms.`
-      });
-
       const activeAiProv = (cust.aiProvider || bot.aiProvider || 'openrouter').toUpperCase();
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Active AI Provider**\n-# Configured engine: ${activeAiProv}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          label: activeAiProv.slice(0, 80),
-          disabled: true,
-          custom_id: 'cfg_pill_aiprov'
-        }
-      });
-
       const hasAiKey = Boolean(cust.aiApiKey || bot.aiApiKey);
-      containerComponents.push({
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**AI API Key Status**\n-# Required to execute autonomous configuration commands.`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: hasAiKey ? 3 : 4,
-          label: hasAiKey ? 'Key Configured' : 'Missing Key',
-          disabled: true,
-          custom_id: 'cfg_pill_aikeystat'
-        }
-      });
 
       containerComponents.push({
         type: 10,
         content: [
-          `### ◈ NATURAL LANGUAGE CONTROL`,
-          `> Tell the assistant what you want to change in plain English, and it updates the bot automatically:`,
-          `> • *"Set my session channel to #patrol-announcements and give role 1234 on promotion."*`,
-          `> • *"Change the welcome message to 'Welcome {user} to {server}!' and enable it."*`,
-          `> • *"Update category 2 to High Rank and set its spawn category to 12345678."*`
+          `# AUTONOMOUS CONFIGURATION ENGINE`,
+          `### AI CONFIGURATION ASSISTANT • PAGE 8/8`,
+          `\`\`\`ini`,
+          `[AI AUTOMATION TELEMETRY]`,
+          `PROVIDER        = ${activeAiProv}`,
+          `KEY_STATUS      = ${hasAiKey ? 'AUTHENTICATED' : 'MISSING KEY'}`,
+          `INTERACTION     = NATURAL LANGUAGE PARSER`,
+          `\`\`\``,
+          `> Tell the assistant what you want to change in plain English:`,
+          `> • "Set my session channel to #patrol-announcements and give role 1234 on promotion."`,
+          `> • "Update category 2 to High Rank and set its spawn folder to 12345678."`
         ].join('\n')
       });
 
@@ -639,34 +514,32 @@ export function buildConfigPanelPayload(botId, page = 1) {
     });
   }
 
-  // Master Navigation Controls
+  // Master Navigation Controls (Strictly zero emojis)
   containerComponents.push({
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 2,
-          label: 'Back',
-          emoji: EMOJIS.BTN_ARROW_LEFT,
-          custom_id: `cfg_nav_prev_${botId}_${activePage}`,
-          disabled: activePage <= 1
-        },
-        {
-          type: 2,
-          style: 2,
-          label: 'Next',
-          emoji: EMOJIS.BTN_ARROW_RIGHT,
-          custom_id: `cfg_nav_next_${botId}_${activePage}`,
-          disabled: activePage >= TOTAL_PAGES
-        },
-        {
-          type: 2,
-          style: 2,
-          label: 'Refresh',
-          custom_id: `cfg_nav_refresh_${botId}_${activePage}`
-        }
-      ]
-    });
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        label: 'Previous',
+        custom_id: `cfg_nav_prev_${botId}_${activePage}`,
+        disabled: activePage <= 1
+      },
+      {
+        type: 2,
+        style: 2,
+        label: 'Next',
+        custom_id: `cfg_nav_next_${botId}_${activePage}`,
+        disabled: activePage >= TOTAL_PAGES
+      },
+      {
+        type: 2,
+        style: 2,
+        label: 'Refresh',
+        custom_id: `cfg_nav_refresh_${botId}_${activePage}`
+      }
+    ]
+  });
 
   return {
     flags: 32768,
