@@ -8,11 +8,11 @@ export const CONFIG = {
   // Command Prefix for quick management commands (-close, -open)
   PREFIX: "-",
 
-  // Top Banner Image (large header at top of panel & in tickets)
-  TOP_BANNER_URL: "https://media.discordapp.net/attachments/1528834540599251100/1548863472329166908/orl.png?ex=6aad3844&is=6aabe6c4&hm=d75dbb4596a45253ae15ba8c40d564015ce09c33ac536694ea6093aaf9ec7e7d&=&format=webp&quality=lossless",
+  // Top Banner Image (large header at top of panel & in tickets) - null until configured
+  TOP_BANNER_URL: null,
 
-  // Bottom Banner Image (thin blue accent strip below buttons)
-  BOTTOM_BANNER_URL: "https://media.discordapp.net/attachments/1528834540599251100/1548863471956005004/New_Project_-_2026-09-13T211015.958.png?ex=6aad3844&is=6aabe6c4&hm=2ba54eef28ee39f1b13e9fa0fee9dc4115ef281d2e8b0cb0a795256129658c52&=&format=webp&quality=lossless",
+  // Bottom Banner Image (thin blue accent strip below buttons) - null until configured
+  BOTTOM_BANNER_URL: null,
 
   // Channel ID where closed ticket logs and transcripts are sent
   TRANSCRIPTS_CHANNEL_ID: "1548876816171798678",
@@ -74,8 +74,8 @@ export const CONFIG = {
   SESSION: {
     API_KEY: "hRuRFYohGUkyRiRfUiXP-iAJxPmVLVGGcCVnXBkXHcXMOKTxACCtjqkjTgVub",
     API_BASE: "https://api.erlc.gg/v1",
-    TOP_BANNER_URL: "https://media.discordapp.net/attachments/1549619044443881562/1550251964934266980/700C2C5F-87DF-4040-9B5D-199F13E4FFFB.png?ex=6aada826&is=6aac56a6&hm=8106843f406d2c1b4b0956a60fcbf65d93b336981d1867ffcccdf60456fdf908&=&format=webp&quality=lossless&width=2048&height=684",
-    BOTTOM_BANNER_URL: "https://media.discordapp.net/attachments/1550286332918501436/1550287860970684556/New_Project_-_2026-09-13T211015.958.png?ex=6aadc995&is=6aac7815&hm=a3a555030d639e62bfdcd1dafd55c6583dc5bd06d4295f0185ee739bf5d761d4&=&format=webp&quality=lossless",
+    TOP_BANNER_URL: null,
+    BOTTOM_BANNER_URL: null,
     NOTIFICATION_ROLE_ID: "1548112626389618718",
     DEFAULT_JOIN_CODE: "liberty",
     DESCRIPTION:
@@ -83,8 +83,8 @@ export const CONFIG = {
     CHANNEL_ID: "1548147260297322496",
     INGAME_VC_ID: "1550318371340550254",
     QUEUE_VC_ID: "1550318480136470638",
-    VOTE_TOP_BANNER_URL: "https://media.discordapp.net/attachments/1549619044443881562/1550251964934266980/700C2C5F-87DF-4040-9B5D-199F13E4FFFB.png?ex=6aada826&is=6aac56a6&hm=8106843f406d2c1b4b0956a60fcbf65d93b336981d1867ffcccdf60456fdf908&=&format=webp&quality=lossless&width=2048&height=684",
-    VOTE_BOTTOM_BANNER_URL: "https://media.discordapp.net/attachments/1528834540599251100/1548863471956005004/New_Project_-_2026-09-13T211015.958.png?ex=6aad3844&is=6aabe6c4&hm=2ba54eef28ee39f1b13e9fa0fee9dc4115ef281d2e8b0cb0a795256129658c52&=&format=webp&quality=lossless"
+    VOTE_TOP_BANNER_URL: null,
+    VOTE_BOTTOM_BANNER_URL: null
   },
 
   // Staff Applications System Configuration

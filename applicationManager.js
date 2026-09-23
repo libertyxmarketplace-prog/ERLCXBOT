@@ -41,16 +41,15 @@ function writeJsonFile(filePath, data) {
   }
 }
 
-function getBottomBannerAttachment() {
-  const bottomBannerPath = path.join(__dirname, 'assets', 'bottom-banner.png');
-  if (fs.existsSync(bottomBannerPath)) {
+function getBottomBannerAttachment(customUrl = null) {
+  if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
     return {
-      url: 'attachment://bottom-banner.png',
-      attachment: new AttachmentBuilder(bottomBannerPath, { name: 'bottom-banner.png' })
+      url: customUrl.trim(),
+      attachment: null
     };
   }
   return {
-    url: CONFIG.SESSION?.BOTTOM_BANNER_URL || null,
+    url: null,
     attachment: null
   };
 }
@@ -175,25 +174,10 @@ export function getRoleDisplayName(role) {
  * featuring the top banner and String Select Menu (strictly no emojis).
  */
 export function buildApplicationPanel(customConfig = null) {
-  const bannerPath = path.join(__dirname, 'assets', 'applications_banner.png');
   const files = [];
 
-  let topBannerMediaUrl = customConfig?.appTopBannerUrl || CONFIG.APPLICATIONS?.TOP_BANNER_URL || null;
-  if (!topBannerMediaUrl && fs.existsSync(bannerPath)) {
-    files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
-    topBannerMediaUrl = 'attachment://applications_banner.png';
-  }
-
-  let bottomBannerUrl = null;
-  if (customConfig?.appBottomBannerUrl) {
-    bottomBannerUrl = customConfig.appBottomBannerUrl;
-  } else if (!customConfig || customConfig.appBottomBannerUrl === undefined) {
-    const bottomBanner = getBottomBannerAttachment();
-    if (bottomBanner.attachment) {
-      files.push(bottomBanner.attachment);
-    }
-    bottomBannerUrl = bottomBanner.url;
-  }
+  let topBannerMediaUrl = customConfig?.appTopBannerUrl?.trim() || null;
+  let bottomBannerUrl = customConfig?.appBottomBannerUrl?.trim() || null;
 
   const isIngameOpen = isPositionOpen('ingame_mod');
   const isDiscordOpen = isPositionOpen('discord_mod');

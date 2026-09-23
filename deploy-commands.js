@@ -670,9 +670,6 @@ export const adminOnlyCommands = [
 // Feature commands for customer bots (NO banbot, NO createbot, etc.)
 export const customerCommands = commands;
 
-// Full master commands exclusively for ERLCX#2851
-export const masterCommands = [...commands, ...adminOnlyCommands];
-
 // Slim ERLCX-only commands: just /config, /banbot, and /createbot
 export const erlcxMasterCommands = [
   new SlashCommandBuilder()
@@ -742,6 +739,9 @@ export const configOnlyCommand = [
     )
 ].map(cmd => cmd.toJSON());
 
+// Master ERLCX bot commands: ONLY bot management and config (/listbots, /banbot, /unbanbot, /createbot, /config)
+export const masterCommands = [...configOnlyCommand, ...adminOnlyCommands];
+
 export async function deployCommands(customToken = null, customClientId = null, customGuildId = null, setupOnly = false, isMaster = false) {
   const token = customToken || process.env.DISCORD_TOKEN;
   const clientId = customClientId || process.env.CLIENT_ID;
@@ -781,5 +781,5 @@ export async function deployCommands(customToken = null, customClientId = null, 
 
 // Auto-run if executed directly via `node deploy-commands.js`
 if (process.argv[1]?.endsWith('deploy-commands.js')) {
-  deployCommands();
+  deployCommands(null, null, null, false, true);
 }

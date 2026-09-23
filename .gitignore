@@ -6,3 +6,4 @@ Thumbs.db
 bin/*.exe
 scratch/
 data/bot_instances.json
+data/tickets.json

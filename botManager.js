@@ -37,6 +37,8 @@ export const DEFAULT_CUSTOMIZATIONS = {
     "> • Provide clear and accurate information so our team can assist you properly.",
   topBannerUrl: "",
   bottomBannerUrl: "",
+  ticketInsideBannerUrl: "",    // Header banner inside ticket channels
+  ticketOpenMessage: "",        // Custom welcome/instructions inside opened tickets
   // Ticket categories (up to 5 customizable slots without emojis)
   ticketCategories: [
     { id: "cat_1", name: "General Support", spawnCategoryId: "", pingRoleId: "" },

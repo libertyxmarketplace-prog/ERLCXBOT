@@ -20,8 +20,7 @@ export const EMOJIS = {
   BTN_ARROW_RIGHT: { id: '1396004799396450476', name: 'ArrowForward' }
 };
 
-export const DEFAULT_BOTTOM_BANNER =
-  "https://cdn.discordapp.com/attachments/1551801623641194616/1551813107586834473/bottom_accent.png?ex=6ab35614&is=6ab20494&hm=bf90c8818eecb2b6ed01d27f4ea891683a72c0aaade5113ac14108a43122f884&";
+export const DEFAULT_BOTTOM_BANNER = null;
 
 function maskSecret(str) {
   if (!str || typeof str !== 'string' || str.trim() === '') return '*Not Set*';
@@ -53,10 +52,9 @@ export function buildConfigPanelPayload(botId, page = 1) {
 
   const cust = bot.customizations || {};
   const activePage = Math.max(1, Math.min(TOTAL_PAGES, page));
-  const bottomBannerUrl = cust.bottomBannerUrl || DEFAULT_BOTTOM_BANNER;
+  const bottomBannerUrl = cust.bottomBannerUrl || null;
 
   const containerComponents = [];
-
 
   switch (activePage) {
     // ══════════════════════════════════════════════════════════════════════
@@ -72,19 +70,18 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# SYSTEM CONTROL CONSOLE`,
           `### BOT ACTIVATION • CORE CREDENTIALS & COMMUNITY • PAGE 1/8`,
-          `\`\`\`text`,
-          `[SYSTEM ENGINE TELEMETRY]`,
-          `TENANT IDENTIFIER : ${bot.botId}`,
-          `GATEWAY STATUS    : ${statusText}`,
-          `DISCORD TOKEN     : ${maskSecret(bot.token)}`,
-          `ER:LC API KEY     : ${maskSecret(bot.erlcApiKey)}`,
-          `\`\`\``,
-          `> **Community Server Branding**`,
-          `> • **Server Name:** **${srvName}**`,
-          `> • **Direct In-Game Join Code:** \`${joinCode}\``,
           ``,
-          `> **Gateway Session**`,
-          `> Authenticated and actively processing Discord Gateway events and slash interactions.`
+          `**Instance Telemetry**`,
+          `• **Tenant ID:** \`${bot.botId}\``,
+          `• **Gateway Status:** \`${statusText}\``,
+          `• **Discord Bot Token:** \`${maskSecret(bot.token)}\``,
+          `• **ER:LC Server API Key:** \`${maskSecret(bot.erlcApiKey)}\``,
+          ``,
+          `**Community Server Identity**`,
+          `• **Server Name:** **${srvName}**`,
+          `• **In-Game Join Code:** \`${joinCode}\``,
+          ``,
+          `*Discord Gateway authenticated and actively dispatching interactions.*`
         ].join('\n')
       });
 
@@ -128,32 +125,35 @@ export function buildConfigPanelPayload(botId, page = 1) {
       const transChannel = cust.transcriptsChannelId ? `<#${cust.transcriptsChannelId}>` : '*Not Configured*';
       const defCategory = cust.ticketCategoryId ? `<#${cust.ticketCategoryId}>` : '*Server Root*';
       const defPing = cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}>` : '*None*';
+      const insideBanner = cust.ticketInsideBannerUrl ? '[Active Custom]' : '[Default Clean]';
+      const openGreeting = cust.ticketOpenMessage ? `"${cust.ticketOpenMessage.slice(0, 70)}..."` : '*Default Support Welcome*';
 
       const catRows = categories.map((c, i) => {
         const spawn = c.spawnCategoryId ? `<#${c.spawnCategoryId}>` : (cust.ticketCategoryId ? `<#${cust.ticketCategoryId}> *(Fallback)*` : '*Server Root*');
         const ping = c.pingRoleId ? `<@&${c.pingRoleId}>` : (cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}> *(Fallback)*` : '*None*');
-        return `> **Button ${i + 1}: ${c.name || `Category ${i + 1}`}**\n> └ **Spawn Folder:** ${spawn} • **Alert Role:** ${ping}`;
-      }).join('\n>\n');
+        const label = c.name ? `**${c.name}**` : `*Category ${i + 1} (Disabled)*`;
+        return `• **Button ${i + 1}:** ${label}\n  └ **Spawn Folder:** ${spawn} • **Alert Role:** ${ping}`;
+      }).join('\n\n');
 
       containerComponents.push({
         type: 10,
         content: [
           `# TICKET ROUTING & DISPATCH CONTROLLER`,
           `### TICKET SYSTEM • CATEGORIES & ROUTING • PAGE 2/8`,
-          `\`\`\`text`,
-          `[TICKET DISPATCH ENGINE: ACTIVE]`,
-          `CATEGORY SLOTS : 5/5 CONFIGURED`,
-          `ROUTING MODE   : DYNAMIC CHANNEL ISOLATION`,
-          `\`\`\``,
+          ``,
           `### Active Ticket Category Buttons`,
           catRows,
           ``,
+          `### In-Ticket Embed & Greeting (When Opened)`,
+          `• **Inside Header Banner:** ${insideBanner}`,
+          `• **Inside Greeting Text:** ${openGreeting}`,
+          ``,
           `### Dispatch & Archive Defaults`,
-          `> • **Transcripts Channel:** ${transChannel}`,
-          `> • **Default Spawn Category:** ${defCategory}`,
-          `> • **Default Fallback Alert:** ${defPing}`,
-          `> • **Ticket Panel Title:** **${cust.panelTitle || 'Support'}**`,
-          `> • **Visual Styling:** Top Banner: ${cust.topBannerUrl ? '[Configured]' : '[Default Clean]'} • Bottom Strip: ${cust.bottomBannerUrl ? '[Configured]' : '[Default Clean]'}`
+          `• **Transcripts Channel:** ${transChannel}`,
+          `• **Default Spawn Category:** ${defCategory}`,
+          `• **Default Fallback Alert:** ${defPing}`,
+          `• **Panel Header Title:** **${cust.panelTitle || 'Support'}**`,
+          `• **Visual Assets:** Top Banner: ${cust.topBannerUrl ? '[Active Custom]' : '[None]'} • Bottom Strip: ${cust.bottomBannerUrl ? '[Active Custom]' : '[None]'}`
         ].join('\n')
       });
 
@@ -195,7 +195,7 @@ export function buildConfigPanelPayload(botId, page = 1) {
           {
             type: 2,
             style: 2,
-            label: 'Support Message',
+            label: 'Ticket & Embed Content',
             custom_id: `cfg_btn_text_${botId}`
           }
         ]
@@ -223,24 +223,20 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# EMERGENCY RESPONSE OPERATIONS DISPATCH`,
           `### ER:LC LIVE OPERATIONS & SESSIONS • PAGE 3/8`,
-          `\`\`\`text`,
-          `[OPERATIONS COMMUNICATIONS ENGINE]`,
-          `BROADCAST PIPELINE : SESSION VOTE & AUTOMATED ANNOUNCEMENTS`,
-          `COMMUNICATIONS     : PATROL RADIO & QUEUE VOICE CHANNELS`,
-          `\`\`\``,
+          ``,
           `### Live Communications & Frequencies`,
-          `> • **Session Announcements:** ${sessChannel}`,
-          `> • **In-Game Radio VC:** ${ingameVc}`,
-          `> • **Queue Staging VC:** ${queueVc}`,
+          `• **Session Announcements:** ${sessChannel}`,
+          `• **In-Game Radio VC:** ${ingameVc}`,
+          `• **Queue Staging VC:** ${queueVc}`,
           ``,
           `### Operational Staff Permissions`,
-          `> • **Session Command (Host):** ${hostRole} *(Allowed to start/conclude sessions)*`,
-          `> • **Staff Alert Role:** ${notifyRole} *(Pinged when sessions go live)*`,
+          `• **Session Command (Host):** ${hostRole} *(Allowed to start/conclude sessions)*`,
+          `• **Staff Alert Role:** ${notifyRole} *(Pinged when sessions go live)*`,
           ``,
           `### Broadcast Embed Previews`,
-          `> • **Startup Headline:** **${sStartTitle}**\n>   └ *"${sStartDesc}..."*`,
-          `> • **Shutdown Headline:** **${sShutTitle}**\n>   └ *"${sShutDesc}..."*`,
-          `> • **Visual Assets:** Live Banner: ${cust.sessionTopBannerUrl ? '[Active]' : '[Default]'} • Shutdown Banner: ${cust.sessionShutdownBannerUrl ? '[Active]' : '[Default]'}`
+          `• **Startup Headline:** **${sStartTitle}**\n  └ *"${sStartDesc}..."*`,
+          `• **Shutdown Headline:** **${sShutTitle}**\n  └ *"${sShutDesc}..."*`,
+          `• **Visual Assets:** Live Banner: ${cust.sessionTopBannerUrl ? '[Active Custom]' : '[None]'} • Shutdown Banner: ${cust.sessionShutdownBannerUrl ? '[Active Custom]' : '[None]'}`
         ].join('\n')
       });
 
@@ -291,23 +287,19 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# MODERATION & STAFF ADMINISTRATION`,
           `### MODERATION SYSTEM • INFRACTIONS & PROMOTIONS • PAGE 4/8`,
-          `\`\`\`text`,
-          `[DISCIPLINARY & PROMOTION CONTROLLER]`,
-          `STAFF ADVANCEMENT : AUTOMATED CARD DISPATCH & ROLE MANAGEMENT`,
-          `DISCIPLINARY LOGS : FORMAL INFRACTION NOTICES & PENALTY ASSIGNMENT`,
-          `\`\`\``,
+          ``,
           `### Staff Promotions Configuration`,
-          `> • **Announcements Channel:** ${promoteChan}`,
-          `> • **Who Can Promote:** ${promoStaffRole} *(Staff role permitted to /promote)*`,
-          `> • **Auto-Awarded Rank Role:** ${promoGiveRole}`,
-          `> • **Promotion Banner:** ${promoteBanner ? '[Active Custom]' : '[Default Header]'}`,
+          `• **Announcements Channel:** ${promoteChan}`,
+          `• **Who Can Promote:** ${promoStaffRole} *(Staff role permitted to /promote)*`,
+          `• **Auto-Awarded Rank Role:** ${promoGiveRole}`,
+          `• **Promotion Banner:** ${promoteBanner ? '[Active Custom]' : '[None]'}`,
           ``,
           `### Disciplinary & Infractions Configuration`,
-          `> • **Infractions Log Channel:** ${infractChan}`,
-          `> • **Who Can Infract:** ${infractStaffRole} *(Staff role permitted to /infract)*`,
-          `> • **Strike Role Given:** ${infractGiveRole}`,
-          `> • **Demoted Role Removed:** ${infractRemRole}`,
-          `> • **Infraction Banner:** ${infractBanner ? '[Active Custom]' : '[Default Header]'}`
+          `• **Infractions Log Channel:** ${infractChan}`,
+          `• **Who Can Infract:** ${infractStaffRole} *(Staff role permitted to /infract)*`,
+          `• **Strike Role Given:** ${infractGiveRole}`,
+          `• **Demoted Role Removed:** ${infractRemRole}`,
+          `• **Infraction Banner:** ${infractBanner ? '[Active Custom]' : '[None]'}`
         ].join('\n')
       });
 
@@ -346,19 +338,15 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# RECRUITMENT & ASSESSMENT CONSOLE`,
           `### STAFF APPLICATIONS & IN-GAME QUIZ • PAGE 5/8`,
-          `\`\`\`text`,
-          `[APPLICATIONS INTAKE PIPELINE]`,
-          `RECRUITMENT WORKFLOW : ACTIVE REVIEW & PUBLIC DISPATCH`,
-          `IN-GAME QUIZ ENGINE  : MULTI-MODULE CANDIDATE EVALUATION`,
-          `\`\`\``,
+          ``,
           `### Review & Results Channels`,
-          `> • **Staff Review Channel:** ${revChannel} *(Where staff review submissions)*`,
-          `> • **Public Results Channel:** ${resChannel} *(Where acceptances/denials post)*`,
+          `• **Staff Review Channel:** ${revChannel} *(Where staff review submissions)*`,
+          `• **Public Results Channel:** ${resChannel} *(Where acceptances/denials post)*`,
           ``,
           `### Application Panel & Quiz Content`,
-          `> • **Panel Title:** **${cust.appTitle || 'Staff Application'}**`,
-          `> • **Quiz Intro Notice:** *"${quizIntro}..."*`,
-          `> • **Visuals:** Top Banner: ${cust.appTopBannerUrl ? '[Active]' : '[Default]'} • Bottom Strip: ${cust.appBottomBannerUrl ? '[Active]' : '[Default]'}`
+          `• **Panel Header Title:** **${cust.appTitle || 'Staff Application'}**`,
+          `• **Quiz Intro Notice:** *"${quizIntro}..."*`,
+          `• **Visual Assets:** Top Banner: ${cust.appTopBannerUrl ? '[Active Custom]' : '[None]'} • Bottom Strip: ${cust.appBottomBannerUrl ? '[Active Custom]' : '[None]'}`
         ].join('\n')
       });
 
@@ -397,14 +385,11 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# COMMUNITY DOCUMENTATION & POLICIES`,
           `### SERVER DOCUMENTATION & POLICIES • PAGE 6/8`,
-          `\`\`\`text`,
-          `[POLICY & DOCUMENTATION VAULT]`,
-          `DIRECTORIES : DEPARTMENT ROSTER, REGULATIONS & STAFF MANUALS`,
-          `\`\`\``,
+          ``,
           `### Publishing Channels`,
-          `> • **Department Info Panel:** ${deptChan} • Header: ${cust.deptBannerUrl ? '[Active]' : '[Not Set]'}`,
-          `> • **Community Regulations:** ${regChan} • Header: ${cust.regulationsBannerUrl ? '[Active]' : '[Not Set]'}`,
-          `> • **Staff Documentation:** ${staffChan} • Strip: ${cust.staffDocsBottomBannerUrl ? '[Active]' : '[Not Set]'}`
+          `• **Department Info Panel:** ${deptChan} • Header: ${cust.deptBannerUrl ? '[Active Custom]' : '[None]'}`,
+          `• **Community Regulations:** ${regChan} • Header: ${cust.regulationsBannerUrl ? '[Active Custom]' : '[None]'}`,
+          `• **Staff Documentation:** ${staffChan} • Bottom Strip: ${cust.staffDocsBottomBannerUrl ? '[Active Custom]' : '[None]'}`
         ].join('\n')
       });
 
@@ -437,15 +422,15 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# AUTOMATED ARRIVALS & GUEST INDUCTION`,
           `### WELCOME SYSTEM • PAGE 7/8`,
-          `\`\`\`text`,
-          `[GUEST INDUCTION ENGINE]`,
-          `STATUS         : ${isWelcomeOn ? 'ACTIVE // BROADCASTING GREETINGS' : 'DISABLED // DORMANT'}`,
-          `DYNAMIC TOKENS : {user}, {server}, {count}`,
-          `\`\`\``,
-          `### Welcome Channel & Message`,
-          `> • **Target Channel:** ${welcomeChan}`,
-          `> • **Card Graphic:** ${cust.welcomeBannerUrl ? '[Custom Image]' : '[Default Clean]'}`,
-          `> • **Message Template:**\n>   └ *"${welcomeMsg}"*`
+          ``,
+          `### Status & Dynamic Tokens`,
+          `• **Status:** ${isWelcomeOn ? 'ACTIVE // BROADCASTING GREETINGS' : 'DISABLED // DORMANT'}`,
+          `• **Available Tokens:** \`{user}\`, \`{server}\`, \`{count}\``,
+          ``,
+          `### Welcome Channel & Message Delivery`,
+          `• **Target Channel:** ${welcomeChan}`,
+          `• **Card Graphic:** ${cust.welcomeBannerUrl ? '[Active Custom]' : '[Default Clean]'}`,
+          `• **Message Template:**\n  └ *"${welcomeMsg}"*`
         ].join('\n')
       });
 
@@ -483,16 +468,16 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# AUTONOMOUS CONFIGURATION ENGINE`,
           `### AI CONFIGURATION ASSISTANT • PAGE 8/8`,
-          `\`\`\`text`,
-          `[NATURAL LANGUAGE ASSISTANT]`,
-          `ACTIVE ENGINE : ${activeAiProv}`,
-          `AUTHENTICATION: ${hasAiKey ? 'AUTHENTICATED // READY' : 'KEY MISSING'}`,
-          `\`\`\``,
+          ``,
+          `### Engine Telemetry`,
+          `• **Active Engine:** \`${activeAiProv}\``,
+          `• **Authentication:** ${hasAiKey ? '`AUTHENTICATED // READY`' : '`KEY MISSING`'}`,
+          ``,
           `### Natural Language Control`,
-          `> You can configure the bot directly using conversational plain English:`,
-          `> • *"Set my session channel to #patrol-announcements and let role @Promoters promote staff."*`,
-          `> • *"Update category 2 to High Rank and set its spawn category to #high-rank-tickets."*`,
-          `> • *"Set welcome message to 'Welcome to Florida RP, {user}!' and turn on welcome."*`
+          `You can configure the bot directly using conversational plain English:`,
+          `• *"Set my session channel to #patrol-announcements and let role @Promoters promote staff."*`,
+          `• *"Update category 2 to High Rank and set its spawn category to #high-rank-tickets."*`,
+          `• *"Set welcome message to 'Welcome to Florida RP, {user}!' and turn on welcome."*`
         ].join('\n')
       });
 
@@ -797,7 +782,7 @@ export function buildTicketBannersModal(botId) {
 }
 
 /**
- * Build Support Text & Rules Modal (Page 2)
+ * Build Support Text & Inside-Ticket Embed Modal (Page 2)
  */
 export function buildSupportTextModal(botId) {
   const bot = getBotInstance(botId);
@@ -805,7 +790,7 @@ export function buildSupportTextModal(botId) {
 
   const modal = new ModalBuilder()
     .setCustomId(`cfg_modal_text_${botId}`)
-    .setTitle('Customize Ticket Support Message');
+    .setTitle('Ticket & In-Ticket Content');
 
   const titleInput = new TextInputBuilder()
     .setCustomId('panelTitle')
@@ -825,6 +810,23 @@ export function buildSupportTextModal(botId) {
     .setRequired(true);
   if (cust.panelDescription?.trim()) descInput.setValue(cust.panelDescription.trim());
 
+  const openMsgInput = new TextInputBuilder()
+    .setCustomId('ticketOpenMessage')
+    .setLabel('In-Ticket Greeting & Instructions')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder('Welcome! Our support team has been notified...')
+    .setMaxLength(1000)
+    .setRequired(false);
+  if (cust.ticketOpenMessage?.trim()) openMsgInput.setValue(cust.ticketOpenMessage.trim());
+
+  const insideBannerInput = new TextInputBuilder()
+    .setCustomId('ticketInsideBannerUrl')
+    .setLabel('In-Ticket Header Banner URL')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('https://... (or leave empty)')
+    .setRequired(false);
+  if (cust.ticketInsideBannerUrl?.trim()) insideBannerInput.setValue(cust.ticketInsideBannerUrl.trim());
+
   const rulesDescInput = new TextInputBuilder()
     .setCustomId('rulesDescription')
     .setLabel('Guidelines / Rules Modal Text')
@@ -837,6 +839,8 @@ export function buildSupportTextModal(botId) {
   modal.addComponents(
     new ActionRowBuilder().addComponents(titleInput),
     new ActionRowBuilder().addComponents(descInput),
+    new ActionRowBuilder().addComponents(openMsgInput),
+    new ActionRowBuilder().addComponents(insideBannerInput),
     new ActionRowBuilder().addComponents(rulesDescInput)
   );
 

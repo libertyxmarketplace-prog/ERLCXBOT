@@ -12,16 +12,15 @@ import { CONFIG } from './config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getBottomBannerAttachment() {
-  const bottomBannerPath = path.join(__dirname, 'assets', 'bottom-banner.png');
-  if (fs.existsSync(bottomBannerPath)) {
+function getBottomBannerAttachment(customUrl = null) {
+  if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
     return {
-      url: 'attachment://bottom-banner.png',
-      attachment: new AttachmentBuilder(bottomBannerPath, { name: 'bottom-banner.png' })
+      url: customUrl.trim(),
+      attachment: null
     };
   }
   return {
-    url: CONFIG.SESSION?.BOTTOM_BANNER_URL || null,
+    url: null,
     attachment: null
   };
 }
@@ -32,24 +31,8 @@ function getBottomBannerAttachment() {
  */
 export function buildStaffDocsHubPayload(customConfig = null) {
   const files = [];
-  const bannerPath = path.join(__dirname, 'assets', 'banner_staff_docs.png');
-  let topBannerUrl = customConfig?.staffDocsTopBannerUrl || null;
-
-  if (!topBannerUrl && fs.existsSync(bannerPath)) {
-    files.push(new AttachmentBuilder(bannerPath, { name: 'banner_staff_docs.png' }));
-    topBannerUrl = 'attachment://banner_staff_docs.png';
-  }
-
-  let bottomBannerUrl = null;
-  if (customConfig?.staffDocsBottomBannerUrl) {
-    bottomBannerUrl = customConfig.staffDocsBottomBannerUrl;
-  } else if (!customConfig || customConfig.staffDocsBottomBannerUrl === undefined) {
-    const bottomBanner = getBottomBannerAttachment();
-    if (bottomBanner.attachment) {
-      files.push(bottomBanner.attachment);
-    }
-    bottomBannerUrl = bottomBanner.url;
-  }
+  let topBannerUrl = customConfig?.staffDocsTopBannerUrl?.trim() || null;
+  let bottomBannerUrl = customConfig?.staffDocsBottomBannerUrl?.trim() || null;
 
   const containerComponents = [];
 

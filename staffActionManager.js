@@ -13,16 +13,15 @@ import { CONFIG } from './config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getBottomBannerAttachment() {
-  const bottomBannerPath = path.join(__dirname, 'assets', 'bottom-banner.png');
-  if (fs.existsSync(bottomBannerPath)) {
+function getBottomBannerAttachment(customUrl = null) {
+  if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
     return {
-      url: 'attachment://bottom-banner.png',
-      attachment: new AttachmentBuilder(bottomBannerPath, { name: 'bottom-banner.png' })
+      url: customUrl.trim(),
+      attachment: null
     };
   }
   return {
-    url: CONFIG.SESSION?.BOTTOM_BANNER_URL || null,
+    url: null,
     attachment: null
   };
 }
@@ -32,13 +31,7 @@ function getBottomBannerAttachment() {
  */
 export function buildPromotionCard({ user, newRank, oldRank = null, reason = null, promotedBy, role = null, bannerUrl = null }) {
   const files = [];
-  const bannerPath = path.join(__dirname, 'assets', 'banner_promotion.png');
-  let topBannerUrl = bannerUrl || null;
-
-  if (!topBannerUrl && fs.existsSync(bannerPath)) {
-    files.push(new AttachmentBuilder(bannerPath, { name: 'banner_promotion.png' }));
-    topBannerUrl = 'attachment://banner_promotion.png';
-  }
+  let topBannerUrl = bannerUrl?.trim() || null;
 
   // Sanitize rank label so buttons and pills NEVER display numeric IDs or mention tokens
   let cleanRank = (role ? role.name : newRank) || 'Promoted Staff';
@@ -176,13 +169,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
  */
 export function buildInfractionCard({ user, type, reason, proof = null, issuedBy, bannerUrl = null }) {
   const files = [];
-  const bannerPath = path.join(__dirname, 'assets', 'banner_infraction.png');
-  let topBannerUrl = bannerUrl || null;
-
-  if (!topBannerUrl && fs.existsSync(bannerPath)) {
-    files.push(new AttachmentBuilder(bannerPath, { name: 'banner_infraction.png' }));
-    topBannerUrl = 'attachment://banner_infraction.png';
-  }
+  let topBannerUrl = bannerUrl?.trim() || null;
 
   const containerComponents = [];
 

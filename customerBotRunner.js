@@ -96,6 +96,91 @@ export async function startCustomerBot(botId) {
       console.warn(`[CUSTOMER BOT ${botId}] Error:`, err.message);
     });
 
+    // Send Welcome Message when a new member joins on customer bot's server
+    customerClient.on(Events.GuildMemberAdd, async member => {
+      try {
+        const currentBot = getBotInstance(botId);
+        const cust = currentBot?.customizations;
+        if (!cust?.welcomeEnabled) return;
+
+        const guild = member.guild;
+        let channel = null;
+
+        if (cust.welcomeChannelId) {
+          channel = guild.channels.cache.get(cust.welcomeChannelId) ||
+            await guild.channels.fetch(cust.welcomeChannelId).catch(() => null);
+        }
+
+        if (!channel) {
+          const fetched = await guild.channels.fetch().catch(() => guild.channels.cache);
+          channel = fetched?.find?.(c =>
+            c && c.isTextBased() && (
+              c.name.toLowerCase().includes('welcome') ||
+              c.name.toLowerCase().includes('joins') ||
+              c.name === '𝖬𝖺𝗂𝗇' ||
+              c.name.toLowerCase() === 'main'
+            )
+          );
+        }
+
+        if (!channel && guild.systemChannel && guild.systemChannel.isTextBased()) {
+          channel = guild.systemChannel;
+        }
+
+        if (!channel) return;
+
+        const welcomeTemplate = cust.welcomeText || "Welcome to {server}, {user}! Enjoy your stay.";
+        const memberCount = (guild.memberCount || 1).toLocaleString();
+        const serverName = cust.serverName || guild.name || 'our server';
+
+        const formattedMsg = welcomeTemplate
+          .replace(/{user}/g, `<@${member.id}>`)
+          .replace(/{username}/g, member.user.username)
+          .replace(/{server}/g, serverName)
+          .replace(/{count}/g, memberCount);
+
+        const containerComponents = [];
+        if (cust.welcomeBannerUrl && cust.welcomeBannerUrl.trim() !== '') {
+          containerComponents.push({
+            type: 12,
+            items: [{ media: { url: cust.welcomeBannerUrl.trim() } }]
+          });
+        }
+
+        containerComponents.push({
+          type: 10,
+          content: formattedMsg
+        });
+
+        // Pill with member count
+        containerComponents.push({
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 2,
+              label: `${memberCount} Members`,
+              disabled: true,
+              custom_id: 'welcome_member_count_pill'
+            }
+          ]
+        });
+
+        await channel.send({
+          flags: 32768,
+          components: [
+            {
+              type: 17,
+              components: containerComponents
+            }
+          ]
+        });
+        console.log(`[CUSTOMER BOT ${botId}] Sent welcome card for ${member.user.tag} in #${channel.name}`);
+      } catch (wErr) {
+        console.warn(`[CUSTOMER BOT ${botId}] Welcome send error:`, wErr.message);
+      }
+    });
+
     // Handle slash commands, buttons, and modals for this customer bot
     customerClient.on(Events.InteractionCreate, async interaction => {
       try {

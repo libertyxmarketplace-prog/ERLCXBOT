@@ -20,17 +20,15 @@ import { loadDeskData, isReportStaffDisabled } from './storage.js';
 export function buildTicketPanel(deskData = null, customConfig = null) {
   const desk = deskData || loadDeskData();
   const disabledList = Array.isArray(desk?.disabledCategories) ? desk.disabledCategories : [];
-  const isGeneralDisabled = disabledList.includes('general');
-  const isManagementDisabled = disabledList.includes('management');
 
-  const topBanner = customConfig?.topBannerUrl || CONFIG.TOP_BANNER_URL;
-  const bottomBanner = customConfig?.bottomBannerUrl || CONFIG.BOTTOM_BANNER_URL;
-  const panelTitle = customConfig?.panelTitle || CONFIG.PANEL_TITLE;
-  const panelDesc = customConfig?.panelDescription || CONFIG.PANEL_DESCRIPTION;
+  const topBanner = customConfig?.topBannerUrl || null;
+  const bottomBanner = customConfig?.bottomBannerUrl || null;
+  const panelTitle = customConfig?.panelTitle || 'Support';
+  const panelDesc = customConfig?.panelDescription || 'If you require support, open a ticket below and our team will be ready to help.';
 
   const containerComponents = [];
 
-  // 1. Top Banner Image inside container (only if set)
+  // 1. Top Banner Image inside container (only if explicitly configured by user)
   if (topBanner && topBanner.trim() !== '') {
     containerComponents.push({
       type: 12,
@@ -73,7 +71,7 @@ export function buildTicketPanel(deskData = null, customConfig = null) {
     { id: 'cat_2', name: 'High Rank' }
   ];
   const configuredCats = Array.isArray(customConfig?.ticketCategories) && customConfig.ticketCategories.length > 0
-    ? customConfig.ticketCategories.filter(c => c && c.name && c.name.trim() !== '')
+    ? customConfig.ticketCategories.filter(c => c && c.name && c.name.trim() !== '' && c.name.toLowerCase() !== 'none' && c.name.toLowerCase() !== 'disabled')
     : defaultCats;
 
   const categoryButtons = configuredCats.slice(0, 5).map((cat, idx) => {
@@ -96,8 +94,8 @@ export function buildTicketPanel(deskData = null, customConfig = null) {
     });
   }
 
-  // 5. Bottom blue accent strip inside container
-  if (bottomBanner) {
+  // 5. Bottom banner (only if explicitly configured by user)
+  if (bottomBanner && bottomBanner.trim() !== '') {
     containerComponents.push({
       type: 12,
       items: [
@@ -269,12 +267,12 @@ export function buildTrainingTicketControl(ticketData) {
 }
 
 /**
- * Builds the ticket control panel using Discord Components V2 Container (type 17):
- * - Banner at top (type 12)
- * - Title without emdashes (ERLCX Support | Category)
+ * Builds the inside-ticket control card using Discord Components V2 Container (type 17):
+ * - Banner at top (only if configured)
+ * - Title and custom welcome greeting
  * - Claim and Close buttons INSIDE the container
  */
-export function buildTicketControl(ticketData) {
+export function buildTicketControl(ticketData, customConfig = null) {
   if (ticketData?.category === 'training') {
     return buildTrainingTicketControl(ticketData);
   }
@@ -285,57 +283,66 @@ export function buildTicketControl(ticketData) {
   const reasonText = ticketData.reason ? ticketData.reason : '*No reason provided.*';
 
   const categoryName = ticketData.categoryLabel || 'Support';
+  const serverName = customConfig?.serverName || 'ERLCX';
+  const welcomeText = customConfig?.ticketOpenMessage ||
+    `Welcome <@${ticketData.authorId}>. Our support team has been notified.\nPlease provide all relevant details regarding your inquiry while a staff member responds.`;
 
-  const containerComponents = [
-    // 1. Top Banner inside ticket container
-    {
+  const topBanner = customConfig?.ticketInsideBannerUrl || customConfig?.topBannerUrl || null;
+  const bottomBanner = customConfig?.bottomBannerUrl || null;
+
+  const containerComponents = [];
+
+  // 1. Top Banner inside ticket container (only if set by user)
+  if (topBanner && topBanner.trim() !== '') {
+    containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.TOP_BANNER_URL
+            url: topBanner
           }
         }
       ]
-    },
-    // 2. Ticket information without emdashes
-    {
-      type: 10,
-      content: 
-        `## ERLCX Support | ${categoryName}\n` +
-        `> Welcome <@${ticketData.authorId}>. Our support team has been notified.\n` +
-        `> Please provide all relevant details regarding your inquiry while a staff member responds.\n\n` +
-        `**Opened By:** <@${ticketData.authorId}> (${ticketData.authorTag})\n` +
-        `**Assigned Handler:** ${handlerText}\n` +
-        `**Status:** ${statusText}\n` +
-        `**Reason:** ${reasonText}`
-    },
-    // 3. Action Row with Claim and Close buttons INSIDE the container
-    {
-      type: 1,
-      components: [
-        isClaimed
-          ? {
-              type: 2,
-              style: 2, // Secondary
-              label: 'Unclaim',
-              custom_id: 'ticket_unclaim'
-            }
-          : {
-              type: 2,
-              style: 3, // Success (Green)
-              label: 'Claim',
-              custom_id: 'ticket_claim'
-            },
-        {
-          type: 2,
-          style: 4, // Danger (Red)
-          label: 'Close',
-          custom_id: 'ticket_close_request'
-        }
-      ]
-    }
-  ];
+    });
+  }
+
+  // 2. Ticket information
+  containerComponents.push({
+    type: 10,
+    content: 
+      `## ${serverName} Support | ${categoryName}\n` +
+      `> ${welcomeText.replace(/\n/g, '\n> ')}\n\n` +
+      `**Opened By:** <@${ticketData.authorId}> (${ticketData.authorTag || ticketData.authorId})\n` +
+      `**Assigned Handler:** ${handlerText}\n` +
+      `**Status:** ${statusText}\n` +
+      `**Reason:** ${reasonText}`
+  });
+
+  // 3. Action Row with Claim and Close buttons INSIDE the container
+  containerComponents.push({
+    type: 1,
+    components: [
+      isClaimed
+        ? {
+            type: 2,
+            style: 2, // Secondary
+            label: 'Unclaim',
+            custom_id: 'ticket_unclaim'
+          }
+        : {
+            type: 2,
+            style: 3, // Success (Green)
+            label: 'Claim',
+            custom_id: 'ticket_claim'
+          },
+      {
+        type: 2,
+        style: 4, // Danger (Red)
+        label: 'Close',
+        custom_id: 'ticket_close_request'
+      }
+    ]
+  });
 
   // 4. Section with Red Report Staff Button on far right wall (Management tickets only, if enabled)
   if (ticketData.category === 'management' && !isReportStaffDisabled()) {

@@ -2775,9 +2775,12 @@ export async function handleInteraction(interaction) {
         activeTicket.claimedTag = interaction.user.tag;
         saveActiveTicket(interaction.channel.id, activeTicket);
 
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+
         if (activeTicket.controlMessageId) {
           const controlMsg = await interaction.channel.messages.fetch(activeTicket.controlMessageId).catch(() => null);
-          if (controlMsg) await controlMsg.edit(buildTicketControl(activeTicket)).catch(() => null);
+          if (controlMsg) await controlMsg.edit(buildTicketControl(activeTicket, cust)).catch(() => null);
         }
 
         await interaction.reply({
@@ -2812,9 +2815,12 @@ export async function handleInteraction(interaction) {
         activeTicket.claimedTag = null;
         saveActiveTicket(interaction.channel.id, activeTicket);
 
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+
         if (activeTicket.controlMessageId) {
           const controlMsg = await interaction.channel.messages.fetch(activeTicket.controlMessageId).catch(() => null);
-          if (controlMsg) await controlMsg.edit(buildTicketControl(activeTicket)).catch(() => null);
+          if (controlMsg) await controlMsg.edit(buildTicketControl(activeTicket, cust)).catch(() => null);
         }
 
         await interaction.reply({
@@ -3187,10 +3193,14 @@ export async function handleInteraction(interaction) {
         const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
         const panelTitle = getVal('panelTitle');
         const panelDescription = getVal('panelDescription');
+        const ticketOpenMessage = getVal('ticketOpenMessage');
+        const ticketInsideBannerUrl = getVal('ticketInsideBannerUrl');
         const rulesDescription = getVal('rulesDescription');
 
         if (panelTitle) updateBotCustomization(botId, 'panelTitle', panelTitle);
         if (panelDescription) updateBotCustomization(botId, 'panelDescription', panelDescription);
+        if (ticketOpenMessage !== undefined) updateBotCustomization(botId, 'ticketOpenMessage', ticketOpenMessage);
+        if (ticketInsideBannerUrl !== undefined) updateBotCustomization(botId, 'ticketInsideBannerUrl', ticketInsideBannerUrl);
         if (rulesDescription) updateBotCustomization(botId, 'rulesDescription', rulesDescription);
 
         const payload = buildConfigPanelPayload(botId, 2);
@@ -3622,19 +3632,21 @@ export async function handleInteraction(interaction) {
           }
         }
 
-        // Determine parent category folder ID (from category spawn or bot fallback)
+        // Determine parent category folder ID (from dynamic category spawn or bot fallback)
         let parentCategoryId = null;
-        const candidateCategoryIds = [];
-        if (category.categoryId) candidateCategoryIds.push(category.categoryId);
-        if (cust.ticketCategoryId) candidateCategoryIds.push(cust.ticketCategoryId);
-        if (Array.isArray(category.categoryIds)) candidateCategoryIds.push(...category.categoryIds);
+        const candidateCategoryIds = [
+          customCat?.spawnCategoryId,
+          category?.categoryId,
+          cust?.ticketCategoryId
+        ].filter(Boolean);
 
         for (const catId of candidateCategoryIds) {
-          if (catId) {
-            const exists = interaction.guild.channels.cache.has(catId) || 
-                           await interaction.guild.channels.fetch(catId).catch(() => null);
-            if (exists) {
-              parentCategoryId = catId;
+          const cleanId = String(catId).trim();
+          if (cleanId) {
+            const ch = interaction.guild.channels.cache.get(cleanId) || 
+                       await interaction.guild.channels.fetch(cleanId).catch(() => null);
+            if (ch) {
+              parentCategoryId = ch.id;
               break;
             }
           }
@@ -3666,8 +3678,8 @@ export async function handleInteraction(interaction) {
         const pingMessage = `<@${interaction.user.id}> ${staffPings}`.trim();
         await ticketChannel.send({ content: pingMessage });
 
-        // Send in-ticket control panel
-        const controlPayload = buildTicketControl(ticketData);
+        // Send in-ticket control panel with bot customizations
+        const controlPayload = buildTicketControl(ticketData, cust);
         const controlMessage = await ticketChannel.send(controlPayload);
 
         ticketData.controlMessageId = controlMessage.id;
@@ -5306,7 +5318,10 @@ export async function handleInteraction(interaction) {
         activeTicket.claimedTag = interaction.user.tag;
         saveActiveTicket(interaction.channel.id, activeTicket);
 
-        const updatedControl = buildTicketControl(activeTicket);
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+
+        const updatedControl = buildTicketControl(activeTicket, cust);
         await interaction.update(updatedControl);
 
         const claimEmbed = new EmbedBuilder()
@@ -5344,7 +5359,10 @@ export async function handleInteraction(interaction) {
         activeTicket.claimedTag = null;
         saveActiveTicket(interaction.channel.id, activeTicket);
 
-        const updatedControl = buildTicketControl(activeTicket);
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+
+        const updatedControl = buildTicketControl(activeTicket, cust);
         await interaction.update(updatedControl);
 
         const unclaimEmbed = new EmbedBuilder()

@@ -84,15 +84,9 @@ export function findDepartment(deptId) {
 /**
  * Builds the Header Card (Top Banner + Overview)
  */
-export function buildHeaderPayload() {
-  const bannerPath = path.join(__dirname, 'assets', 'department_banner.png');
+export function buildHeaderPayload(customConfig = null) {
   const files = [];
-  let topBannerMediaUrl = null;
-
-  if (fs.existsSync(bannerPath)) {
-    files.push(new AttachmentBuilder(bannerPath, { name: 'department_banner.png' }));
-    topBannerMediaUrl = 'attachment://department_banner.png';
-  }
+  let topBannerMediaUrl = customConfig?.deptBannerUrl?.trim() || null;
 
   const arrowEmoji = CONFIG.DEPARTMENTS?.ARROW_EMOJI || '<:Right_arrow:1550446417376448593>';
   const overviewList = DEPARTMENTS.map(d => `${arrowEmoji} ${d.emoji} | **${d.name}**`).join('\n');
@@ -140,8 +134,8 @@ export function buildHeaderPayload() {
       overviewList
     );
 
-  if (fs.existsSync(bannerPath)) {
-    fallbackEmbed.setImage('attachment://department_banner.png');
+  if (topBannerMediaUrl) {
+    fallbackEmbed.setImage(topBannerMediaUrl);
   }
 
   const fallbackPayload = {
