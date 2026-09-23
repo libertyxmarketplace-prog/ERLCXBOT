@@ -76,8 +76,10 @@ export const DEFAULT_CUSTOMIZATIONS = {
   welcomeBannerUrl: "",
 
   // ─── Staff Panels ──────────────────────────────────────────────────────────
+  infractionStaffRoleId: "",    // Staff role authorized to issue infractions
   infractRemoveRoleId: "",      // Role removed when infraction issued
   infractGiveRoleId: "",        // Role given when infraction issued
+  promotionStaffRoleId: "",     // Staff role authorized to issue promotions
   promotionGiveRoleId: "",      // Role assigned on promotion
   appDescription:
     "> Welcome to the official Staff Application portal.\n" +

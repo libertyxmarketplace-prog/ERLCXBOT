@@ -272,6 +272,8 @@ function isStaff(member, interaction = null) {
         if (cust.ticketPingRoleId && member?.roles?.cache?.has?.(cust.ticketPingRoleId)) return true;
         if (cust.hostRoleId && member?.roles?.cache?.has?.(cust.hostRoleId)) return true;
         if (cust.notificationRoleId && member?.roles?.cache?.has?.(cust.notificationRoleId)) return true;
+        if (cust.promotionStaffRoleId && member?.roles?.cache?.has?.(cust.promotionStaffRoleId)) return true;
+        if (cust.infractionStaffRoleId && member?.roles?.cache?.has?.(cust.infractionStaffRoleId)) return true;
         if (Array.isArray(cust.ticketCategories)) {
           for (const cat of cust.ticketCategories) {
             if (cat?.pingRoleId && member?.roles?.cache?.has?.(cat.pingRoleId)) return true;
@@ -1529,7 +1531,16 @@ client.on(Events.MessageCreate, async message => {
 
     // -promote @user <role/rank> | [reason]
     if (command === 'promote') {
-      if (!isStaff(message.member)) {
+      const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
+      const cust = botInst?.customizations;
+      const requiredRole = cust?.promotionStaffRoleId;
+      const isOwner = message.guild?.ownerId === message.author?.id;
+      const isAdmin = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
+
+      if (requiredRole && !message.member?.roles?.cache?.has(requiredRole) && !isAdmin && !isOwner) {
+        return sendCleanFeedback(`You must have the <@&${requiredRole}> role or Administrator permissions to issue promotions.`);
+      }
+      if (!requiredRole && !isStaff(message.member)) {
         return sendCleanFeedback('You must be a staff member to issue promotions.');
       }
       const targetUser = message.mentions.users.first();
@@ -1538,7 +1549,7 @@ client.on(Events.MessageCreate, async message => {
       }
 
       // Check for mentioned role in message
-      const mentionedRole = message.mentions.roles.first();
+      const mentionedRole = message.mentions.roles.first() || (cust?.promotionGiveRoleId ? message.guild.roles.cache.get(cust.promotionGiveRoleId) : null);
 
       const restArgs = args.filter(a => !a.startsWith('<@')).join(' ').trim();
       const parts = restArgs.split('|').map(p => p.trim());
@@ -1559,7 +1570,7 @@ client.on(Events.MessageCreate, async message => {
         }
       }
 
-      const PROMOTIONS_CHANNEL_ID = '1550709402896568320';
+      const PROMOTIONS_CHANNEL_ID = cust?.promotionsChannelId || '1550709402896568320';
       let targetChannel = message.guild.channels.cache.get(PROMOTIONS_CHANNEL_ID) ||
         await client.channels.fetch(PROMOTIONS_CHANNEL_ID).catch(() => null) ||
         message.channel;
@@ -1571,7 +1582,8 @@ client.on(Events.MessageCreate, async message => {
           oldRank: null,
           reason,
           promotedBy: message.author,
-          role: newRole
+          role: newRole,
+          bannerUrl: cust?.promoteBannerUrl || cust?.promotionBannerUrl
         });
         await message.delete().catch(() => null);
         await targetChannel.send(promoCard);
@@ -1584,7 +1596,16 @@ client.on(Events.MessageCreate, async message => {
 
     // -infract @user <type> | <reason> | [proof]
     if (command === 'infract') {
-      if (!isStaff(message.member)) {
+      const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
+      const cust = botInst?.customizations;
+      const requiredRole = cust?.infractionStaffRoleId;
+      const isOwner = message.guild?.ownerId === message.author?.id;
+      const isAdmin = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
+
+      if (requiredRole && !message.member?.roles?.cache?.has(requiredRole) && !isAdmin && !isOwner) {
+        return sendCleanFeedback(`You must have the <@&${requiredRole}> role or Administrator permissions to issue infractions.`);
+      }
+      if (!requiredRole && !isStaff(message.member)) {
         return sendCleanFeedback('You must be a staff member to issue infractions.');
       }
       const targetUser = message.mentions.users.first();
@@ -1598,10 +1619,23 @@ client.on(Events.MessageCreate, async message => {
       const reason = parts[1] || 'Failure to adhere to staff operational policy';
       const proof = parts[2] || null;
 
-      const INFRACTIONS_CHANNEL_ID = '1550709451152162887';
+      const INFRACTIONS_CHANNEL_ID = cust?.infractionsChannelId || '1550709451152162887';
       let targetChannel = message.guild.channels.cache.get(INFRACTIONS_CHANNEL_ID) ||
         await client.channels.fetch(INFRACTIONS_CHANNEL_ID).catch(() => null) ||
         message.channel;
+
+      // Automatically assign giveRole and remove removeRole if configured
+      try {
+        const member = await message.guild.members.fetch(targetUser.id).catch(() => null);
+        if (member) {
+          if (cust?.infractGiveRoleId) {
+            await member.roles.add(cust.infractGiveRoleId).catch(() => null);
+          }
+          if (cust?.infractRemoveRoleId && member.roles.cache.has(cust.infractRemoveRoleId)) {
+            await member.roles.remove(cust.infractRemoveRoleId).catch(() => null);
+          }
+        }
+      } catch {}
 
       try {
         const infractCard = buildInfractionCard({
@@ -1609,7 +1643,8 @@ client.on(Events.MessageCreate, async message => {
           type,
           reason,
           proof,
-          issuedBy: message.author
+          issuedBy: message.author,
+          bannerUrl: cust?.infractBannerUrl || cust?.infractionBannerUrl
         });
         await message.delete().catch(() => null);
         await targetChannel.send(infractCard);
@@ -2339,16 +2374,29 @@ export async function handleInteraction(interaction) {
       }
 
       // /promote <user> [role] [rank] [old_role] [old_rank] [reason] [channel]
+      // /promote <user> [role] [rank] [old_role] [old_rank] [reason] [channel]
       if (interaction.commandName === 'promote') {
         if (interaction.deferred || interaction.replied) return;
         await interaction.deferReply({ flags: 64 });
-        if (!isStaff(interaction.member, interaction)) {
+
+        const botInst = getBotInstanceForGuild(interaction.guildId);
+        const cust = botInst?.customizations;
+        const requiredRole = cust?.promotionStaffRoleId;
+        const isOwner = interaction.guild?.ownerId === interaction.user?.id;
+        const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+
+        if (requiredRole && !interaction.member?.roles?.cache?.has(requiredRole) && !isAdmin && !isOwner) {
+          return interaction.editReply({
+            content: `You must have the <@&${requiredRole}> role or Administrator permissions to issue promotions.`
+          });
+        }
+        if (!requiredRole && !isStaff(interaction.member, interaction)) {
           return interaction.editReply({
             content: 'You must be a staff member or administrator to issue promotions.'
           });
         }
         const targetUser = interaction.options.getUser('user');
-        const roleOption = interaction.options.getRole('role');
+        const roleOption = interaction.options.getRole('role') || (cust?.promotionGiveRoleId ? interaction.guild.roles.cache.get(cust.promotionGiveRoleId) : null);
         const rankOption = interaction.options.getString('rank');
         const oldRoleOption = interaction.options.getRole('old_role');
         const oldRankOption = interaction.options.getString('old_rank');
@@ -2378,13 +2426,12 @@ export async function handleInteraction(interaction) {
           }
         }
 
-        const PROMOTIONS_CHANNEL_ID = '1550709402896568320';
+        const PROMOTIONS_CHANNEL_ID = cust?.promotionsChannelId || '1550709402896568320';
         let targetChannel = interaction.options.getChannel('channel') ||
           interaction.guild.channels.cache.get(PROMOTIONS_CHANNEL_ID) ||
           await interaction.client.channels.fetch(PROMOTIONS_CHANNEL_ID).catch(() => null) ||
           interaction.channel;
 
-        const botInst = getBotInstanceForGuild(interaction.guildId);
         try {
           const promoCard = buildPromotionCard({
             user: targetUser,
@@ -2393,7 +2440,7 @@ export async function handleInteraction(interaction) {
             reason,
             promotedBy: interaction.user,
             role: newRole,
-            bannerUrl: botInst?.customizations?.promoteBannerUrl
+            bannerUrl: cust?.promoteBannerUrl || cust?.promotionBannerUrl
           });
           await targetChannel.send(promoCard);
 
@@ -2417,7 +2464,19 @@ export async function handleInteraction(interaction) {
       if (interaction.commandName === 'infract') {
         if (interaction.deferred || interaction.replied) return;
         await interaction.deferReply({ flags: 64 });
-        if (!isStaff(interaction.member, interaction)) {
+
+        const botInst = getBotInstanceForGuild(interaction.guildId);
+        const cust = botInst?.customizations;
+        const requiredRole = cust?.infractionStaffRoleId;
+        const isOwner = interaction.guild?.ownerId === interaction.user?.id;
+        const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+
+        if (requiredRole && !interaction.member?.roles?.cache?.has(requiredRole) && !isAdmin && !isOwner) {
+          return interaction.editReply({
+            content: `You must have the <@&${requiredRole}> role or Administrator permissions to log infractions.`
+          });
+        }
+        if (!requiredRole && !isStaff(interaction.member, interaction)) {
           return interaction.editReply({
             content: 'You must be a staff member or administrator to log infractions.'
           });
@@ -2427,13 +2486,24 @@ export async function handleInteraction(interaction) {
         const reason = interaction.options.getString('reason');
         const proof = interaction.options.getString('proof');
 
-        const INFRACTIONS_CHANNEL_ID = '1550709451152162887';
+        const INFRACTIONS_CHANNEL_ID = cust?.infractionsChannelId || '1550709451152162887';
         let targetChannel = interaction.options.getChannel('channel') ||
           interaction.guild.channels.cache.get(INFRACTIONS_CHANNEL_ID) ||
           await interaction.client.channels.fetch(INFRACTIONS_CHANNEL_ID).catch(() => null) ||
           interaction.channel;
 
-        const botInst = getBotInstanceForGuild(interaction.guildId);
+        // Automatically assign giveRole and remove removeRole if configured
+        try {
+          const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+          if (member) {
+            if (cust?.infractGiveRoleId) {
+              await member.roles.add(cust.infractGiveRoleId).catch(() => null);
+            }
+            if (cust?.infractRemoveRoleId && member.roles.cache.has(cust.infractRemoveRoleId)) {
+              await member.roles.remove(cust.infractRemoveRoleId).catch(() => null);
+            }
+          }
+        } catch {}
         try {
           const infractCard = buildInfractionCard({
             user: targetUser,
@@ -3202,17 +3272,19 @@ export async function handleInteraction(interaction) {
         const botId = interaction.customId.replace('cfg_modal_infraction_', '');
         const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
         const infractionsChannelId = getVal('infractionsChannelId');
+        const infractionStaffRoleId = getVal('infractionStaffRoleId');
         const infractBannerUrl = getVal('infractBannerUrl');
         const infractRemoveRoleId = getVal('infractRemoveRoleId');
         const infractGiveRoleId = getVal('infractGiveRoleId');
 
-        if (infractionsChannelId) updateBotCustomization(botId, 'infractionsChannelId', infractionsChannelId);
+        if (infractionsChannelId !== undefined) updateBotCustomization(botId, 'infractionsChannelId', infractionsChannelId);
+        if (infractionStaffRoleId !== undefined) updateBotCustomization(botId, 'infractionStaffRoleId', infractionStaffRoleId);
         if (infractBannerUrl) {
           updateBotCustomization(botId, 'infractBannerUrl', infractBannerUrl);
           updateBotCustomization(botId, 'infractionBannerUrl', infractBannerUrl);
         }
-        if (infractRemoveRoleId) updateBotCustomization(botId, 'infractRemoveRoleId', infractRemoveRoleId);
-        if (infractGiveRoleId) updateBotCustomization(botId, 'infractGiveRoleId', infractGiveRoleId);
+        if (infractRemoveRoleId !== undefined) updateBotCustomization(botId, 'infractRemoveRoleId', infractRemoveRoleId);
+        if (infractGiveRoleId !== undefined) updateBotCustomization(botId, 'infractGiveRoleId', infractGiveRoleId);
 
         const payload = buildConfigPanelPayload(botId, 4);
         try {
@@ -3227,15 +3299,17 @@ export async function handleInteraction(interaction) {
         const botId = interaction.customId.replace('cfg_modal_promotion_', '');
         const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
         const promotionsChannelId = getVal('promotionsChannelId');
+        const promotionStaffRoleId = getVal('promotionStaffRoleId');
         const promoteBannerUrl = getVal('promoteBannerUrl');
         const promotionGiveRoleId = getVal('promotionGiveRoleId');
 
-        if (promotionsChannelId) updateBotCustomization(botId, 'promotionsChannelId', promotionsChannelId);
+        if (promotionsChannelId !== undefined) updateBotCustomization(botId, 'promotionsChannelId', promotionsChannelId);
+        if (promotionStaffRoleId !== undefined) updateBotCustomization(botId, 'promotionStaffRoleId', promotionStaffRoleId);
         if (promoteBannerUrl) {
           updateBotCustomization(botId, 'promoteBannerUrl', promoteBannerUrl);
           updateBotCustomization(botId, 'promotionBannerUrl', promoteBannerUrl);
         }
-        if (promotionGiveRoleId) updateBotCustomization(botId, 'promotionGiveRoleId', promotionGiveRoleId);
+        if (promotionGiveRoleId !== undefined) updateBotCustomization(botId, 'promotionGiveRoleId', promotionGiveRoleId);
 
         const payload = buildConfigPanelPayload(botId, 4);
         try {

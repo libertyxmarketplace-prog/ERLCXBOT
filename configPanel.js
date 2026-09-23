@@ -72,17 +72,19 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# SYSTEM CONTROL CONSOLE`,
           `### BOT ACTIVATION • CORE CREDENTIALS & COMMUNITY • PAGE 1/8`,
-          `\`\`\`ini`,
-          `[SYSTEM TELEMETRY]`,
-          `TENANT_ID        = ${bot.botId}`,
-          `GATEWAY_STATUS   = ${statusText}`,
-          `DISCORD_TOKEN    = ${maskSecret(bot.token)}`,
-          `ERLC_API_KEY     = ${maskSecret(bot.erlcApiKey)}`,
-          `SERVER_JOIN_CODE = ${joinCode}`,
-          `COMMUNITY_NAME   = ${srvName}`,
+          `\`\`\`text`,
+          `[SYSTEM ENGINE TELEMETRY]`,
+          `TENANT IDENTIFIER : ${bot.botId}`,
+          `GATEWAY STATUS    : ${statusText}`,
+          `DISCORD TOKEN     : ${maskSecret(bot.token)}`,
+          `ER:LC API KEY     : ${maskSecret(bot.erlcApiKey)}`,
           `\`\`\``,
-          `> **Instance Authentication**: Connected to Discord Gateway with active session credentials.`,
-          `> **Server Identity**: Community server branding and direct in-game join code applied across operations.`
+          `> **Community Server Branding**`,
+          `> • **Server Name:** **${srvName}**`,
+          `> • **Direct In-Game Join Code:** \`${joinCode}\``,
+          ``,
+          `> **Gateway Session**`,
+          `> Authenticated and actively processing Discord Gateway events and slash interactions.`
         ].join('\n')
       });
 
@@ -123,37 +125,35 @@ export function buildConfigPanelPayload(botId, page = 1) {
         ? cust.ticketCategories
         : defaultCategories;
 
-      const catLines = categories.map((c, i) => {
-        const num = String(i + 1).padStart(2, '0');
-        const name = (c.name || `Category ${i + 1}`).padEnd(16, ' ').slice(0, 16);
-        const spawnStatus = c.spawnCategoryId ? 'CUSTOM FOLDER' : 'DEFAULT/ROOT';
-        const pingStatus = c.pingRoleId ? 'ROLE ATTACHED' : 'FALLBACK ROLE';
-        return `${num} | ${name} | SPAWN: ${spawnStatus.padEnd(14, ' ')} | PING: ${pingStatus}`;
-      }).join('\n');
-
       const transChannel = cust.transcriptsChannelId ? `<#${cust.transcriptsChannelId}>` : '*Not Configured*';
       const defCategory = cust.ticketCategoryId ? `<#${cust.ticketCategoryId}>` : '*Server Root*';
       const defPing = cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}>` : '*None*';
 
-      const catMentions = categories.map((c, i) => {
-        const spawn = c.spawnCategoryId ? `<#${c.spawnCategoryId}>` : (cust.ticketCategoryId ? `<#${cust.ticketCategoryId}> (Fallback)` : '*Server Root*');
-        const ping = c.pingRoleId ? `<@&${c.pingRoleId}>` : (cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}> (Fallback)` : '*None*');
-        return `> **[${i + 1}] ${c.name || `Category ${i + 1}`}** -> Folder: ${spawn} | Alert: ${ping}`;
-      }).join('\n');
+      const catRows = categories.map((c, i) => {
+        const spawn = c.spawnCategoryId ? `<#${c.spawnCategoryId}>` : (cust.ticketCategoryId ? `<#${cust.ticketCategoryId}> *(Fallback)*` : '*Server Root*');
+        const ping = c.pingRoleId ? `<@&${c.pingRoleId}>` : (cust.ticketPingRoleId ? `<@&${cust.ticketPingRoleId}> *(Fallback)*` : '*None*');
+        return `> **Button ${i + 1}: ${c.name || `Category ${i + 1}`}**\n> └ **Spawn Folder:** ${spawn} • **Alert Role:** ${ping}`;
+      }).join('\n>\n');
 
       containerComponents.push({
         type: 10,
         content: [
           `# TICKET ROUTING & DISPATCH CONTROLLER`,
           `### TICKET SYSTEM • CATEGORIES & ROUTING • PAGE 2/8`,
-          `\`\`\`ini`,
-          `[TICKET CATEGORY ROUTING MATRIX]`,
-          catLines,
+          `\`\`\`text`,
+          `[TICKET DISPATCH ENGINE: ACTIVE]`,
+          `CATEGORY SLOTS : 5/5 CONFIGURED`,
+          `ROUTING MODE   : DYNAMIC CHANNEL ISOLATION`,
           `\`\`\``,
-          catMentions,
+          `### Active Ticket Category Buttons`,
+          catRows,
           ``,
-          `> **Transcripts**: ${transChannel} | **Default Folder**: ${defCategory} | **Default Ping**: ${defPing}`,
-          `> **Panel Title**: **${cust.panelTitle || 'Support'}** | **Top Banner**: ${cust.topBannerUrl ? '[Configured]' : '[Default Clean]'} | **Bottom Strip**: ${cust.bottomBannerUrl ? '[Configured]' : '[Default Clean]'}`
+          `### Dispatch & Archive Defaults`,
+          `> • **Transcripts Channel:** ${transChannel}`,
+          `> • **Default Spawn Category:** ${defCategory}`,
+          `> • **Default Fallback Alert:** ${defPing}`,
+          `> • **Ticket Panel Title:** **${cust.panelTitle || 'Support'}**`,
+          `> • **Visual Styling:** Top Banner: ${cust.topBannerUrl ? '[Configured]' : '[Default Clean]'} • Bottom Strip: ${cust.bottomBannerUrl ? '[Configured]' : '[Default Clean]'}`
         ].join('\n')
       });
 
@@ -214,31 +214,33 @@ export function buildConfigPanelPayload(botId, page = 1) {
       const hostRole = cust.hostRoleId ? `<@&${cust.hostRoleId}>` : '*Not Configured*';
 
       const sStartTitle = cust.sessionStartTitle || 'SESSION STARTING';
-      const sStartDesc = (cust.sessionStartDesc || 'The session vote has succeeded and operations are now commencing.').slice(0, 75);
+      const sStartDesc = (cust.sessionStartDesc || 'The session vote has succeeded and operations are now commencing.').slice(0, 90);
       const sShutTitle = cust.sessionShutdownTitle || 'SESSION CONCLUDED';
-      const sShutDesc = (cust.sessionShutdownDesc || 'The session has concluded. Thank you for attending today\'s operations.').slice(0, 75);
+      const sShutDesc = (cust.sessionShutdownDesc || 'The session has concluded. Thank you for attending today\'s operations.').slice(0, 90);
 
       containerComponents.push({
         type: 10,
         content: [
           `# EMERGENCY RESPONSE OPERATIONS DISPATCH`,
           `### ER:LC LIVE OPERATIONS & SESSIONS • PAGE 3/8`,
-          `\`\`\`ini`,
-          `[OPERATIONS COMMUNICATIONS MATRIX]`,
-          `ANNOUNCEMENTS_CHANNEL = ${cust.sessionChannelId ? 'CONFIGURED' : 'NOT SET'}`,
-          `INGAME_RADIO_VOICE    = ${cust.ingameVcId ? 'CONFIGURED' : 'NOT SET'}`,
-          `QUEUE_STAGING_VOICE   = ${cust.queueVcId ? 'CONFIGURED' : 'NOT SET'}`,
-          `DUTY_ALERT_ROLE       = ${cust.notificationRoleId ? 'ATTACHED' : 'NOT SET'}`,
-          `SESSION_COMMAND_ROLE  = ${cust.hostRoleId ? 'ATTACHED' : 'NOT SET'}`,
-          `STARTUP_HEADLINE      = ${sStartTitle}`,
-          `SHUTDOWN_HEADLINE     = ${sShutTitle}`,
+          `\`\`\`text`,
+          `[OPERATIONS COMMUNICATIONS ENGINE]`,
+          `BROADCAST PIPELINE : SESSION VOTE & AUTOMATED ANNOUNCEMENTS`,
+          `COMMUNICATIONS     : PATROL RADIO & QUEUE VOICE CHANNELS`,
           `\`\`\``,
-          `> **Operations Channels**: Announcements: ${sessChannel}`,
-          `> **Voice Frequencies**: Radio VC: ${ingameVc} | Queue VC: ${queueVc}`,
-          `> **Operations Command**: Host Role: ${hostRole} | Duty Alert: ${notifyRole}`,
-          `> **Startup Dispatch**: **${sStartTitle}** - *${sStartDesc}...*`,
-          `> **Shutdown Dispatch**: **${sShutTitle}** - *${sShutDesc}...*`,
-          `> **Visual Assets**: Live Banner: ${cust.sessionTopBannerUrl ? '[Active]' : '[Default]'} | Shutdown: ${cust.sessionShutdownBannerUrl ? '[Active]' : '[Default]'}`
+          `### Live Communications & Frequencies`,
+          `> • **Session Announcements:** ${sessChannel}`,
+          `> • **In-Game Radio VC:** ${ingameVc}`,
+          `> • **Queue Staging VC:** ${queueVc}`,
+          ``,
+          `### Operational Staff Permissions`,
+          `> • **Session Command (Host):** ${hostRole} *(Allowed to start/conclude sessions)*`,
+          `> • **Staff Alert Role:** ${notifyRole} *(Pinged when sessions go live)*`,
+          ``,
+          `### Broadcast Embed Previews`,
+          `> • **Startup Headline:** **${sStartTitle}**\n>   └ *"${sStartDesc}..."*`,
+          `> • **Shutdown Headline:** **${sShutTitle}**\n>   └ *"${sShutDesc}..."*`,
+          `> • **Visual Assets:** Live Banner: ${cust.sessionTopBannerUrl ? '[Active]' : '[Default]'} • Shutdown Banner: ${cust.sessionShutdownBannerUrl ? '[Active]' : '[Default]'}`
         ].join('\n')
       });
 
@@ -274,31 +276,38 @@ export function buildConfigPanelPayload(botId, page = 1) {
     // PAGE 4: MODERATION SYSTEM • INFRACTIONS & PROMOTIONS (4/8)
     // ══════════════════════════════════════════════════════════════════════
     case 4: {
-      const infractBanner = cust.infractionBannerUrl || cust.infractBannerUrl;
-      const promoteBanner = cust.promotionBannerUrl || cust.promoteBannerUrl;
-
       const infractChan = cust.infractionsChannelId ? `<#${cust.infractionsChannelId}>` : '*Not Configured*';
       const promoteChan = cust.promotionsChannelId ? `<#${cust.promotionsChannelId}>` : '*Not Configured*';
-      const remRole = cust.infractRemoveRoleId ? `<@&${cust.infractRemoveRoleId}>` : '*None*';
-      const giveRole = cust.infractGiveRoleId ? `<@&${cust.infractGiveRoleId}>` : '*None*';
-      const promoGiveRole = cust.promotionGiveRoleId ? `<@&${cust.promotionGiveRoleId}>` : '*None*';
+      const promoStaffRole = cust.promotionStaffRoleId ? `<@&${cust.promotionStaffRoleId}>` : '*Any Staff / Admin*';
+      const promoGiveRole = cust.promotionGiveRoleId ? `<@&${cust.promotionGiveRoleId}>` : '*None (Manual Selection)*';
+      const infractStaffRole = cust.infractionStaffRoleId ? `<@&${cust.infractionStaffRoleId}>` : '*Any Staff / Admin*';
+      const infractGiveRole = cust.infractGiveRoleId ? `<@&${cust.infractGiveRoleId}>` : '*None*';
+      const infractRemRole = cust.infractRemoveRoleId ? `<@&${cust.infractRemoveRoleId}>` : '*None*';
+      const infractBanner = cust.infractionBannerUrl || cust.infractBannerUrl;
+      const promoteBanner = cust.promotionBannerUrl || cust.promoteBannerUrl;
 
       containerComponents.push({
         type: 10,
         content: [
-          `# MODERATION & DISCIPLINARY DIRECTORY`,
+          `# MODERATION & STAFF ADMINISTRATION`,
           `### MODERATION SYSTEM • INFRACTIONS & PROMOTIONS • PAGE 4/8`,
-          `\`\`\`ini`,
-          `[INFRACTIONS & PROMOTIONS MATRIX]`,
-          `INFRACTIONS_CHANNEL = ${cust.infractionsChannelId ? 'CONFIGURED' : 'NOT SET'}`,
-          `PROMOTIONS_CHANNEL  = ${cust.promotionsChannelId ? 'CONFIGURED' : 'NOT SET'}`,
-          `PENALTY_REMOVE_ROLE = ${cust.infractRemoveRoleId ? 'ROLE SET' : 'NONE'}`,
-          `PENALTY_ASSIGN_ROLE = ${cust.infractGiveRoleId ? 'ROLE SET' : 'NONE'}`,
-          `PROMOTION_RANK_ROLE = ${cust.promotionGiveRoleId ? 'ROLE SET' : 'NONE'}`,
+          `\`\`\`text`,
+          `[DISCIPLINARY & PROMOTION CONTROLLER]`,
+          `STAFF ADVANCEMENT : AUTOMATED CARD DISPATCH & ROLE MANAGEMENT`,
+          `DISCIPLINARY LOGS : FORMAL INFRACTION NOTICES & PENALTY ASSIGNMENT`,
           `\`\`\``,
-          `> **Infraction Routing**: Channel: ${infractChan} | Removed: ${remRole} | Given: ${giveRole}`,
-          `> **Promotion Routing**: Channel: ${promoteChan} | Promotion Role: ${promoGiveRole}`,
-          `> **Visual Assets**: Infraction Banner: ${infractBanner ? '[Active]' : '[Default]'} | Promotion Banner: ${promoteBanner ? '[Active]' : '[Default]'}`
+          `### Staff Promotions Configuration`,
+          `> • **Announcements Channel:** ${promoteChan}`,
+          `> • **Who Can Promote:** ${promoStaffRole} *(Staff role permitted to /promote)*`,
+          `> • **Auto-Awarded Rank Role:** ${promoGiveRole}`,
+          `> • **Promotion Banner:** ${promoteBanner ? '[Active Custom]' : '[Default Header]'}`,
+          ``,
+          `### Disciplinary & Infractions Configuration`,
+          `> • **Infractions Log Channel:** ${infractChan}`,
+          `> • **Who Can Infract:** ${infractStaffRole} *(Staff role permitted to /infract)*`,
+          `> • **Strike Role Given:** ${infractGiveRole}`,
+          `> • **Demoted Role Removed:** ${infractRemRole}`,
+          `> • **Infraction Banner:** ${infractBanner ? '[Active Custom]' : '[Default Header]'}`
         ].join('\n')
       });
 
@@ -330,23 +339,26 @@ export function buildConfigPanelPayload(botId, page = 1) {
     case 5: {
       const revChannel = cust.reviewChannelId ? `<#${cust.reviewChannelId}>` : '*Default Channel*';
       const resChannel = cust.resultsChannelId ? `<#${cust.resultsChannelId}>` : '*Default Channel*';
-      const quizIntro = (cust.appQuizIntroText || 'Welcome to the in-game quiz!').slice(0, 75);
+      const quizIntro = (cust.appQuizIntroText || 'Welcome to the in-game quiz!').slice(0, 90);
 
       containerComponents.push({
         type: 10,
         content: [
           `# RECRUITMENT & ASSESSMENT CONSOLE`,
           `### STAFF APPLICATIONS & IN-GAME QUIZ • PAGE 5/8`,
-          `\`\`\`ini`,
-          `[APPLICATION & QUIZ TELEMETRY]`,
-          `REVIEW_CHANNEL     = ${cust.reviewChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
-          `RESULTS_CHANNEL    = ${cust.resultsChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
-          `APPLICATION_TITLE  = ${cust.appTitle || 'Staff Application'}`,
-          `QUIZ_WORKFLOW      = ACTIVE`,
+          `\`\`\`text`,
+          `[APPLICATIONS INTAKE PIPELINE]`,
+          `RECRUITMENT WORKFLOW : ACTIVE REVIEW & PUBLIC DISPATCH`,
+          `IN-GAME QUIZ ENGINE  : MULTI-MODULE CANDIDATE EVALUATION`,
           `\`\`\``,
-          `> **Intake Routing**: Submissions Review: ${revChannel} | Announcements: ${resChannel}`,
-          `> **Quiz Intro**: *"${quizIntro}..."*`,
-          `> **Visual Assets**: Top Banner: ${cust.appTopBannerUrl ? '[Active]' : '[Default]'} | Bottom Strip: ${cust.appBottomBannerUrl ? '[Active]' : '[Default]'}`
+          `### Review & Results Channels`,
+          `> • **Staff Review Channel:** ${revChannel} *(Where staff review submissions)*`,
+          `> • **Public Results Channel:** ${resChannel} *(Where acceptances/denials post)*`,
+          ``,
+          `### Application Panel & Quiz Content`,
+          `> • **Panel Title:** **${cust.appTitle || 'Staff Application'}**`,
+          `> • **Quiz Intro Notice:** *"${quizIntro}..."*`,
+          `> • **Visuals:** Top Banner: ${cust.appTopBannerUrl ? '[Active]' : '[Default]'} • Bottom Strip: ${cust.appBottomBannerUrl ? '[Active]' : '[Default]'}`
         ].join('\n')
       });
 
@@ -383,17 +395,16 @@ export function buildConfigPanelPayload(botId, page = 1) {
       containerComponents.push({
         type: 10,
         content: [
-          `# COMMUNITY DOCUMENTATION & REGULATORY VAULT`,
+          `# COMMUNITY DOCUMENTATION & POLICIES`,
           `### SERVER DOCUMENTATION & POLICIES • PAGE 6/8`,
-          `\`\`\`ini`,
-          `[SERVER DOCUMENTATION MATRIX]`,
-          `DEPARTMENT_PANEL_CHANNEL = ${cust.deptChannelId ? 'CONFIGURED' : 'NOT SET'}`,
-          `REGULATIONS_CHANNEL      = ${cust.regulationsChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
-          `STAFF_DOCS_CHANNEL       = ${cust.staffDocsChannelId ? 'CONFIGURED' : 'NOT SET'}`,
+          `\`\`\`text`,
+          `[POLICY & DOCUMENTATION VAULT]`,
+          `DIRECTORIES : DEPARTMENT ROSTER, REGULATIONS & STAFF MANUALS`,
           `\`\`\``,
-          `> **Department Directory**: Channel: ${deptChan} | Header: ${cust.deptBannerUrl ? '[Active]' : '[Not Set]'}`,
-          `> **Community Regulations**: Channel: ${regChan} | Header: ${cust.regulationsBannerUrl ? '[Active]' : '[Not Set]'}`,
-          `> **Staff Documentation**: Channel: ${staffChan} | Strip: ${cust.staffDocsBottomBannerUrl ? '[Active]' : '[Not Set]'}`
+          `### Publishing Channels`,
+          `> • **Department Info Panel:** ${deptChan} • Header: ${cust.deptBannerUrl ? '[Active]' : '[Not Set]'}`,
+          `> • **Community Regulations:** ${regChan} • Header: ${cust.regulationsBannerUrl ? '[Active]' : '[Not Set]'}`,
+          `> • **Staff Documentation:** ${staffChan} • Strip: ${cust.staffDocsBottomBannerUrl ? '[Active]' : '[Not Set]'}`
         ].join('\n')
       });
 
@@ -426,14 +437,15 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# AUTOMATED ARRIVALS & GUEST INDUCTION`,
           `### WELCOME SYSTEM • PAGE 7/8`,
-          `\`\`\`ini`,
-          `[WELCOME SYSTEM TELEMETRY]`,
-          `STATUS          = ${isWelcomeOn ? 'ACTIVE // BROADCASTING' : 'DISABLED // DORMANT'}`,
-          `TARGET_CHANNEL  = ${cust.welcomeChannelId ? 'CONFIGURED' : 'DEFAULT'}`,
-          `CARD_GRAPHIC    = ${cust.welcomeBannerUrl ? 'CUSTOM IMAGE' : 'CLEAN / NONE'}`,
+          `\`\`\`text`,
+          `[GUEST INDUCTION ENGINE]`,
+          `STATUS         : ${isWelcomeOn ? 'ACTIVE // BROADCASTING GREETINGS' : 'DISABLED // DORMANT'}`,
+          `DYNAMIC TOKENS : {user}, {server}, {count}`,
           `\`\`\``,
-          `> **Induction Channel**: Target: ${welcomeChan}`,
-          `> **Welcome Template**: *"${welcomeMsg}"*`
+          `### Welcome Channel & Message`,
+          `> • **Target Channel:** ${welcomeChan}`,
+          `> • **Card Graphic:** ${cust.welcomeBannerUrl ? '[Custom Image]' : '[Default Clean]'}`,
+          `> • **Message Template:**\n>   └ *"${welcomeMsg}"*`
         ].join('\n')
       });
 
@@ -471,15 +483,16 @@ export function buildConfigPanelPayload(botId, page = 1) {
         content: [
           `# AUTONOMOUS CONFIGURATION ENGINE`,
           `### AI CONFIGURATION ASSISTANT • PAGE 8/8`,
-          `\`\`\`ini`,
-          `[AI AUTOMATION TELEMETRY]`,
-          `PROVIDER        = ${activeAiProv}`,
-          `KEY_STATUS      = ${hasAiKey ? 'AUTHENTICATED' : 'MISSING KEY'}`,
-          `INTERACTION     = NATURAL LANGUAGE PARSER`,
+          `\`\`\`text`,
+          `[NATURAL LANGUAGE ASSISTANT]`,
+          `ACTIVE ENGINE : ${activeAiProv}`,
+          `AUTHENTICATION: ${hasAiKey ? 'AUTHENTICATED // READY' : 'KEY MISSING'}`,
           `\`\`\``,
-          `> Tell the assistant what you want to change in plain English:`,
-          `> • "Set my session channel to #patrol-announcements and give role 1234 on promotion."`,
-          `> • "Update category 2 to High Rank and set its spawn folder to 12345678."`
+          `### Natural Language Control`,
+          `> You can configure the bot directly using conversational plain English:`,
+          `> • *"Set my session channel to #patrol-announcements and let role @Promoters promote staff."*`,
+          `> • *"Update category 2 to High Rank and set its spawn category to #high-rank-tickets."*`,
+          `> • *"Set welcome message to 'Welcome to Florida RP, {user}!' and turn on welcome."*`
         ].join('\n')
       });
 
@@ -514,14 +527,15 @@ export function buildConfigPanelPayload(botId, page = 1) {
     });
   }
 
-  // Master Navigation Controls (Strictly zero emojis)
+  // Master Navigation Controls (with custom arrow icons restored)
   containerComponents.push({
     type: 1,
     components: [
       {
         type: 2,
         style: 2,
-        label: 'Previous',
+        label: 'Back',
+        emoji: EMOJIS.BTN_ARROW_LEFT,
         custom_id: `cfg_nav_prev_${botId}_${activePage}`,
         disabled: activePage <= 1
       },
@@ -529,6 +543,7 @@ export function buildConfigPanelPayload(botId, page = 1) {
         type: 2,
         style: 2,
         label: 'Next',
+        emoji: EMOJIS.BTN_ARROW_RIGHT,
         custom_id: `cfg_nav_next_${botId}_${activePage}`,
         disabled: activePage >= TOTAL_PAGES
       },
@@ -1019,6 +1034,14 @@ export function buildInfractionConfigModal(botId) {
   const existing = cust.infractionBannerUrl || cust.infractBannerUrl;
   if (existing?.trim()) bannerInput.setValue(existing.trim());
 
+  const staffRoleInput = new TextInputBuilder()
+    .setCustomId('infractionStaffRoleId')
+    .setLabel('Staff Role Allowed to Infract')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g. 1548876816171798680 (Who can /infract)')
+    .setRequired(false);
+  if (cust.infractionStaffRoleId?.trim()) staffRoleInput.setValue(cust.infractionStaffRoleId.trim());
+
   const removeRoleInput = new TextInputBuilder()
     .setCustomId('infractRemoveRoleId')
     .setLabel('Role ID to Remove on Infraction')
@@ -1037,9 +1060,10 @@ export function buildInfractionConfigModal(botId) {
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(chanInput),
-    new ActionRowBuilder().addComponents(bannerInput),
+    new ActionRowBuilder().addComponents(staffRoleInput),
+    new ActionRowBuilder().addComponents(giveRoleInput),
     new ActionRowBuilder().addComponents(removeRoleInput),
-    new ActionRowBuilder().addComponents(giveRoleInput)
+    new ActionRowBuilder().addComponents(bannerInput)
   );
   return modal;
 }
@@ -1063,6 +1087,22 @@ export function buildPromotionConfigModal(botId) {
     .setRequired(false);
   if (cust.promotionsChannelId?.trim()) chanInput.setValue(cust.promotionsChannelId.trim());
 
+  const staffRoleInput = new TextInputBuilder()
+    .setCustomId('promotionStaffRoleId')
+    .setLabel('Staff Role Allowed to Promote')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g. 1548876816171798680 (Who can /promote)')
+    .setRequired(false);
+  if (cust.promotionStaffRoleId?.trim()) staffRoleInput.setValue(cust.promotionStaffRoleId.trim());
+
+  const giveRoleInput = new TextInputBuilder()
+    .setCustomId('promotionGiveRoleId')
+    .setLabel('Role ID Assigned on Promotion')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g. 1548876816171798683 (Optional auto-award)')
+    .setRequired(false);
+  if (cust.promotionGiveRoleId?.trim()) giveRoleInput.setValue(cust.promotionGiveRoleId.trim());
+
   const bannerInput = new TextInputBuilder()
     .setCustomId('promoteBannerUrl')
     .setLabel('Promotion Panel Banner URL')
@@ -1072,18 +1112,11 @@ export function buildPromotionConfigModal(botId) {
   const existing = cust.promotionBannerUrl || cust.promoteBannerUrl;
   if (existing?.trim()) bannerInput.setValue(existing.trim());
 
-  const giveRoleInput = new TextInputBuilder()
-    .setCustomId('promotionGiveRoleId')
-    .setLabel('Role ID Assigned on Promotion')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g. 1548876816171798683')
-    .setRequired(false);
-  if (cust.promotionGiveRoleId?.trim()) giveRoleInput.setValue(cust.promotionGiveRoleId.trim());
-
   modal.addComponents(
     new ActionRowBuilder().addComponents(chanInput),
-    new ActionRowBuilder().addComponents(bannerInput),
-    new ActionRowBuilder().addComponents(giveRoleInput)
+    new ActionRowBuilder().addComponents(staffRoleInput),
+    new ActionRowBuilder().addComponents(giveRoleInput),
+    new ActionRowBuilder().addComponents(bannerInput)
   );
   return modal;
 }
