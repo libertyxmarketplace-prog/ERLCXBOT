@@ -109,8 +109,7 @@ export function buildGiveawayCard(giveaway, hasEnded = false) {
     flags: 32768, // IS_COMPONENTS_V2
     components: [
       {
-        type: 17, // Container
-        accent_color: 689405, // Clean modern blue (#0a84fd)
+        type: 17, // Container without accent_color (clean neutral border)
         components: [
           {
             type: 10,
@@ -195,7 +194,7 @@ export async function endGiveaway(client, giveawayId) {
             const user = await client.users.fetch(winnerId).catch(() => null);
             if (user) {
               await user.send({
-                content: `🎉 Congratulations <@${winnerId}>! You have won the giveaway for **${giveaway.prize}** in **Orlando Roleplay**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
+                content: `🎉 Congratulations <@${winnerId}>! You have won the giveaway for **${giveaway.prize}** in **ERLCX**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
               }).catch(() => null);
             }
           } catch (dmErr) {
@@ -249,7 +248,7 @@ export async function rerollGiveaway(client, giveawayId, count = 1) {
           const user = await client.users.fetch(winnerId).catch(() => null);
           if (user) {
             await user.send({
-              content: `🎉 Congratulations <@${winnerId}>! You were selected as the new winner for **${giveaway.prize}** in **Orlando Roleplay**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
+              content: `🎉 Congratulations <@${winnerId}>! You were selected as the new winner for **${giveaway.prize}** in **ERLCX**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
             }).catch(() => null);
           }
         } catch (dmErr) {

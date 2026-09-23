@@ -19,6 +19,48 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { CONFIG } from './config.js';
 import {
+  loadBotInstances,
+  getBotInstance,
+  getBotInstanceForGuild,
+  getOrCreateBotInstanceForUser,
+  updateBotInstance,
+  updateBotCustomization,
+  createBotInstance,
+  retriggerBot,
+  banBot,
+  unbanBot,
+  listBots,
+  MASTER_BOT_ID,
+  DEFAULT_CUSTOMIZATIONS,
+  getBotForInteraction
+} from './botManager.js';
+import {
+  buildConfigPanelPayload,
+  buildCredentialsModal,
+  buildServerCoreModal,
+  buildTicketCategoryNamesModal,
+  buildTicketCategorySpawnsModal,
+  buildTicketCategoryPingsModal,
+  buildTicketBannersModal,
+  buildSupportTextModal,
+  buildSessionChannelsModal,
+  buildSessionBannersModal,
+  buildSessionTextModal,
+  buildInfractionConfigModal,
+  buildPromotionConfigModal,
+  buildAppsModal,
+  buildAppQuizModal,
+  buildDocsModal,
+  buildWelcomeModal,
+  buildAiKeyModal,
+  buildAskAiModal,
+  TOTAL_PAGES,
+  EMOJIS
+} from './configPanel.js';
+import { startCustomerBot, startAllConfiguredBots, setInteractionHandler } from './customerBotRunner.js';
+import { processAiConfigRequest, AI_CAPABILITIES } from './aiConfigAssistant.js';
+import { deployCommands } from './deploy-commands.js';
+import {
   loadDeskData,
   setDeskStatus,
   loadPanelsData,
@@ -66,6 +108,7 @@ import {
 import { generateTranscript } from './transcript.js';
 import {
   fetchErlcServerData,
+  fetchErlcServerDataForBot,
   buildSessionPanel,
   addSessionPanel,
   updateAllSessionPanels,
@@ -99,6 +142,40 @@ import {
   GIVEAWAY_EMOJI
 } from './giveawayManager.js';
 import { randomUUID } from 'crypto';
+
+/**
+ * Refreshes all live session panels for a given bot instance.
+ * Called automatically after config saves that affect session appearance.
+ * @param {string} botId - The bot instance ID.
+ * @param {import('discord.js').Client} discordClient - Discord client reference.
+ */
+async function refreshBotPanels(botId, discordClient) {
+  try {
+    const bot = getBotInstance(botId);
+    if (!bot) return;
+    const { loadSessionPanels, saveSessionPanels, fetchErlcServerData: _fetchData, buildSessionPanel: _build } = await import('./sessionManager.js');
+    const sessionData = await fetchErlcServerDataForBot(bot);
+    const sessionPayload = buildSessionPanel(sessionData, bot.customizations || {});
+    const panelStore = loadSessionPanels();
+    const validPanels = [];
+    for (const panel of (panelStore.panels || [])) {
+      try {
+        const ch = await discordClient.channels.fetch(panel.channelId).catch(() => null);
+        if (!ch) continue;
+        const msg = await ch.messages.fetch(panel.messageId).catch(() => null);
+        if (!msg) continue;
+        await msg.edit(sessionPayload);
+        validPanels.push(panel);
+      } catch (err) {
+        console.warn(`[refreshBotPanels] Could not update panel ${panel.messageId}:`, err.message);
+      }
+    }
+    saveSessionPanels({ panels: validPanels });
+    console.log(`[refreshBotPanels] Refreshed ${validPanels.length} panel(s) for bot ${botId}`);
+  } catch (err) {
+    console.warn(`[refreshBotPanels] Error:`, err.message);
+  }
+}
 import {
   loadApplicationsData,
   saveApplicationsData,
@@ -184,6 +261,24 @@ function isStaff(member, interaction = null) {
     if (memberPerms.has(PermissionFlagsBits.ManageGuild)) return true;
     if (memberPerms.has(PermissionFlagsBits.ManageChannels)) return true;
     if (memberPerms.has(PermissionFlagsBits.ManageMessages)) return true;
+  }
+
+  // Check custom bot configured roles (ticketPingRoleId, hostRoleId, category ping roles)
+  if (interaction) {
+    try {
+      const botInst = getBotForInteraction(interaction);
+      const cust = botInst?.customizations;
+      if (cust) {
+        if (cust.ticketPingRoleId && member?.roles?.cache?.has?.(cust.ticketPingRoleId)) return true;
+        if (cust.hostRoleId && member?.roles?.cache?.has?.(cust.hostRoleId)) return true;
+        if (cust.notificationRoleId && member?.roles?.cache?.has?.(cust.notificationRoleId)) return true;
+        if (Array.isArray(cust.ticketCategories)) {
+          for (const cat of cust.ticketCategories) {
+            if (cat?.pingRoleId && member?.roles?.cache?.has?.(cat.pingRoleId)) return true;
+          }
+        }
+      }
+    } catch {}
   }
 
   // Check configured staff roles
@@ -277,7 +372,8 @@ export async function updateAllLivePanels(discordClient) {
       const message = await channel.messages.fetch(panel.messageId).catch(() => null);
       if (!message) continue;
 
-      const payload = buildTicketPanel();
+      const botInst = getBotInstanceForGuild(panel.guildId || channel.guild?.id);
+      const payload = buildTicketPanel(null, botInst?.customizations);
       await message.edit(payload);
 
       // Clean up any legacy bottom message if it existed
@@ -473,7 +569,7 @@ async function closeTicketWorkflow(channel, closedByUser, reasonOverride = null)
 
 client.once(Events.ClientReady, async () => {
   console.log(`=============================================`);
-  console.log(` Orlando Support Bot logged in as ${client.user.tag}`);
+  console.log(` ERLCX Bot logged in as ${client.user.tag}`);
   console.log(` Loaded ${CONFIG.CATEGORIES.length} Support Categories`);
   console.log(`=============================================`);
 
@@ -483,6 +579,24 @@ client.once(Events.ClientReady, async () => {
   await ensureSessionOfflineState(client);
   await checkAndExpireLoas(client);
   initMusicEngine();
+  try {
+    // 1. Deploy Global Slash Commands for Master Bot (visible across all servers)
+    await deployCommands(null, null, null, false, true);
+    console.log('[MASTER BOT] Master global slash commands deployed successfully.');
+
+    // 2. Also register directly to every server the bot is currently in for instant availability
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        await deployCommands(process.env.DISCORD_TOKEN, client.user.id, guild.id, false, true);
+        console.log(`[MASTER BOT] Commands deployed directly to guild: ${guild.name} (${guild.id})`);
+      } catch (gErr) {
+        console.warn(`[MASTER BOT] Could not deploy to ${guild.name}:`, gErr.message);
+      }
+    }
+  } catch (err) {
+    console.warn('[MASTER BOT] Deploy commands error:', err.message);
+  }
+  await startAllConfiguredBots();
 
   // Auto-refresh live session panels every 60 seconds
   setInterval(async () => {
@@ -545,6 +659,17 @@ client.once(Events.ClientReady, async () => {
   } catch {}
 });
 
+// Automatically deploy slash commands when invited to a new guild
+client.on(Events.GuildCreate, async guild => {
+  console.log(`[MASTER BOT] Joined new guild: ${guild.name} (${guild.id})`);
+  try {
+    await deployCommands(process.env.DISCORD_TOKEN, client.user.id, guild.id, false, true);
+    console.log(`[MASTER BOT] Slash commands successfully deployed to guild ${guild.name} (${guild.id})`);
+  } catch (err) {
+    console.warn(`Failed to deploy commands on guild join:`, err.message);
+  }
+});
+
 // Auto-clean active tickets if a channel is deleted manually in Discord
 client.on(Events.ChannelDelete, async channel => {
   try {
@@ -570,7 +695,7 @@ client.on(Events.GuildMemberAdd, async member => {
 
     let channel = null;
     const GUILD_WELCOME_MAP = {
-      '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397', // Orlando Roleplay #𝖬𝖺𝗂𝗇
+      '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397', // ERLCX #𝖬𝖺𝗂𝗇
       '1530147023754367006': '1549635572698447932' // Discord bot V.2 #welcome
     };
 
@@ -617,7 +742,7 @@ client.on(Events.GuildMemberAdd, async member => {
       const navCh = CONFIG.WELCOME.NAVIGATE_CHANNEL_ID;
       const navText = navCh && guild.channels.cache.has(navCh) ? ` Navigate the server through <#${navCh}>` : '';
       await channel.send({
-        content: `👋 Welcome to ${guild.name || CONFIG.WELCOME.SERVER_NAME || 'Orlando Roleplay'}, <@${member.id}>.${navText}`,
+        content: `👋 Welcome to ${guild.name || CONFIG.WELCOME.SERVER_NAME || 'ERLCX'}, <@${member.id}>.${navText}`,
         components: [fallbackRow]
       });
       console.log(`[GuildMemberAdd] Resilient fallback welcome card sent to #${channel.name}`);
@@ -644,6 +769,38 @@ client.on(Events.MessageCreate, async message => {
         }).catch(() => null);
       }
       return;
+    }
+
+    // Check if the bot is mentioned for AI bot configuration
+    if (message.mentions.has(client.user?.id) && !message.mentions.everyone) {
+      const prompt = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
+      if (prompt.length > 0) {
+        const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
+        if (!botInst) {
+          return message.reply({ content: '⚠️ Bot instance not initialized. Run `/config` first.' }).catch(() => null);
+        }
+        if (botInst.banned) {
+          return message.reply({ content: `⛔ Bot instance \`${botInst.botId}\` is banned: ${botInst.bannedReason || 'Suspended'}` }).catch(() => null);
+        }
+        
+        await message.channel.sendTyping().catch(() => null);
+        const result = await processAiConfigRequest({
+          botId: botInst.botId,
+          prompt,
+          userId: message.author.id
+        });
+
+        if (result.success) {
+          let replyContent = `🤖 **AI Assistant:**\n${result.reply}`;
+          if (result.changes && result.changes.length > 0) {
+            replyContent += `\n\n**Applied Changes:**\n` + result.changes.map(c => `• \`${c.field}\`: \`${c.value}\``).join('\n');
+          }
+          await message.reply({ content: replyContent }).catch(() => null);
+        } else {
+          await message.reply({ content: `⚠️ ${result.message}` }).catch(() => null);
+        }
+        return;
+      }
     }
 
     const content = message.content.trim();
@@ -1265,7 +1422,7 @@ client.on(Events.MessageCreate, async message => {
       const fullArgs = args.join(' ').trim();
       if (!fullArgs || fullArgs.toLowerCase() === 'help') {
         const helpEmbed = new EmbedBuilder()
-          .setTitle('Orlando Roleplay | Leave of Absence (LOA) Format')
+          .setTitle('ERLCX | Leave of Absence (LOA) Format')
           .setDescription(
             `> To submit an official Leave of Absence, please use the standard format:\n\n` +
             `\`-loa <Duration or End Date> | <Reason>\`\n\n` +
@@ -1276,7 +1433,7 @@ client.on(Events.MessageCreate, async message => {
             `*Once submitted, your request will be dispatched to Staff Management in <#1548336007311527996> for review.*`
           )
           .setColor(0x0284c7)
-          .setFooter({ text: 'Orlando Roleplay Staff Administration • Leave System' });
+          .setFooter({ text: 'ERLCX Staff Administration • Leave System' });
 
         return message.channel.send({ embeds: [helpEmbed] });
       }
@@ -1471,12 +1628,154 @@ client.on(Events.MessageCreate, async message => {
 /*                           INTERACTION ROUTING                              */
 /* ========================================================================== */
 
-client.on(Events.InteractionCreate, async interaction => {
+export async function handleInteraction(interaction) {
   try {
+    /* ---------------------------------------------------------------------- */
+    /* MASTER BOT GUARD — ERLCX only handles /config, /banbot, /createbot     */
+    /* All other commands must be handled by the customer bot, not ERLCX.     */
+    /* ---------------------------------------------------------------------- */
+    const MASTER_CLIENT_ID = process.env.CLIENT_ID;
+    const isMasterBot = interaction.applicationId === MASTER_CLIENT_ID;
+    const MASTER_ONLY_COMMANDS = ['config', 'banbot', 'createbot'];
+
+    if (isMasterBot && interaction.isChatInputCommand() && !MASTER_ONLY_COMMANDS.includes(interaction.commandName)) {
+      // ERLCX is not supposed to respond to this command — silently ignore
+      return;
+    }
+
+    // Also guard buttons, modals, and select menus for master bot — only cfg_ interactions pass through
+    if (isMasterBot && (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu())) {
+      const cid = interaction.customId || '';
+      if (!cid.startsWith('cfg_') && !cid.startsWith('cfg_modal') && !cid.startsWith('cfg_nav')) {
+        return; // ERLCX ignores non-config UI interactions
+      }
+    }
+
     /* ---------------------------------------------------------------------- */
     /* 1. SLASH COMMANDS                                                      */
     /* ---------------------------------------------------------------------- */
     if (interaction.isChatInputCommand()) {
+      const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
+
+      // Check if bot is banned
+      if (botInst && botInst.banned) {
+        return interaction.reply({
+          content: `${EMOJIS.CROSS} **Bot Instance Suspended**\n> This bot instance (\`${botInst.botId}\`) has been banned by the platform administrator.\n> **Reason:** \`${botInst.bannedReason || 'Terms violation'}\``,
+          flags: 64
+        });
+      }
+
+      // /config [page] [bot_id]
+      if (interaction.commandName === 'config') {
+        await interaction.deferReply({ flags: 32832 }).catch(() => null);
+
+        const isUserStaff = isStaff(interaction.member, interaction) ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+
+        if (!isUserStaff) {
+          return interaction.editReply({
+            content: `${EMOJIS.CROSS} You must have Administrator or Staff permissions to access \`/config\`.`
+          });
+        }
+
+        const requestedPage = interaction.options.getInteger('page') || 1;
+        const requestedBotId = interaction.options.getString('bot_id');
+        let targetBot = requestedBotId ? getBotInstance(requestedBotId) : getOrCreateBotInstanceForUser(interaction.user.id, interaction.guild?.id);
+
+        if (!targetBot) {
+          return interaction.editReply({
+            content: `${EMOJIS.CROSS} Could not find bot instance with ID \`${requestedBotId}\`.`
+          });
+        }
+
+        const payload = buildConfigPanelPayload(targetBot.botId, requestedPage);
+        return interaction.editReply(payload).catch(err => {
+          console.error('[CONFIG] editReply error:', err);
+        });
+      }
+
+      // /createbot [user]
+      if (interaction.commandName === 'createbot') {
+        const isOwner = interaction.user.id === interaction.guild?.ownerId ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+        if (!isOwner) {
+          return interaction.reply({ content: '❌ Only administrators can create bot instances.', ephemeral: true });
+        }
+        const targetUser = interaction.options.getUser('user') || interaction.user;
+        const newBot = createBotInstance(targetUser.id, { guildId: interaction.guild?.id });
+        return interaction.reply({
+          content: `✅ **New Bot Instance Created!**\n• **Bot ID:** \`${newBot.botId}\`\n• **Assigned User:** <@${targetUser.id}>\n• **Status:** \`${newBot.status}\`\n\nRun \`/config\` to begin setup.`,
+          ephemeral: true
+        });
+      }
+
+      // /retrigger <bot_id>
+      if (interaction.commandName === 'retrigger') {
+        const isOwner = interaction.user.id === interaction.guild?.ownerId ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+        if (!isOwner) {
+          return interaction.reply({ content: '❌ Only administrators can retrigger bot instances.', ephemeral: true });
+        }
+        const bId = interaction.options.getString('bot_id');
+        const res = retriggerBot(bId);
+        return interaction.reply({
+          content: res.success ? `🔄 **Retrigger Success:** ${res.message}` : `❌ **Retrigger Failed:** ${res.message}`,
+          ephemeral: true
+        });
+      }
+
+      // /banbot <bot_id> [reason]
+      if (interaction.commandName === 'banbot') {
+        const isOwner = interaction.user.id === interaction.guild?.ownerId ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+        if (!isOwner) {
+          return interaction.reply({ content: '❌ Only administrators can ban bot instances.', ephemeral: true });
+        }
+        const bId = interaction.options.getString('bot_id');
+        const reason = interaction.options.getString('reason') || 'Violation of service terms';
+        const res = banBot(bId, reason);
+        return interaction.reply({
+          content: res.success ? `⛔ **Bot Banned:** ${res.message}` : `❌ **Failed to Ban Bot:** ${res.message}`,
+          ephemeral: true
+        });
+      }
+
+      // /unbanbot <bot_id>
+      if (interaction.commandName === 'unbanbot') {
+        const isOwner = interaction.user.id === interaction.guild?.ownerId ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+        if (!isOwner) {
+          return interaction.reply({ content: '❌ Only administrators can unban bot instances.', ephemeral: true });
+        }
+        const bId = interaction.options.getString('bot_id');
+        const res = unbanBot(bId);
+        return interaction.reply({
+          content: res.success ? `✅ **Bot Unbanned:** ${res.message}` : `❌ **Failed to Unban Bot:** ${res.message}`,
+          ephemeral: true
+        });
+      }
+
+      // /listbots
+      if (interaction.commandName === 'listbots') {
+        const isOwner = interaction.user.id === interaction.guild?.ownerId ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+        if (!isOwner) {
+          return interaction.reply({ content: '❌ Only administrators can view bot instances.', ephemeral: true });
+        }
+        const bots = listBots();
+        const listText = bots.map(b =>
+          `• \`${b.botId}\`: Owner: <@${b.ownerUserId}> | Status: \`${b.status}\` | Banned: \`${b.banned ? 'YES' : 'NO'}\` | Setup: \`${b.setupCompleted ? 'Complete' : 'Pending'}\``
+        ).join('\n') || 'No bot instances registered.';
+
+        const listEmbed = new EmbedBuilder()
+          .setTitle('🤖 Registered Bot Instances')
+          .setDescription(listText)
+          .setColor(0x0a84fd);
+
+        return interaction.reply({ embeds: [listEmbed], ephemeral: true });
+      }
+
       // Standalone /purge <amount>
       if (interaction.commandName === 'purge') {
         await interaction.deferReply({ flags: 64 });
@@ -1614,7 +1913,7 @@ client.on(Events.InteractionCreate, async interaction => {
           const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
 
           try {
-            await activateLiveSessionPanel(client, targetChannel.id);
+            await activateLiveSessionPanel(interaction.client, targetChannel.id);
 
             return interaction.editReply({
               content: `Session Information panel successfully posted to <#${targetChannel.id}>.`
@@ -1637,11 +1936,11 @@ client.on(Events.InteractionCreate, async interaction => {
           }
 
           const targetChannel = interaction.options.getChannel('channel')
-            || (CONFIG.SESSION.CHANNEL_ID ? await client.channels.fetch(CONFIG.SESSION.CHANNEL_ID).catch(() => null) : null)
+            || (CONFIG.SESSION.CHANNEL_ID ? await interaction.client.channels.fetch(CONFIG.SESSION.CHANNEL_ID).catch(() => null) : null)
             || interaction.channel;
 
           try {
-            await shutdownSession(client, targetChannel.id);
+            await shutdownSession(interaction.client, targetChannel.id);
             return interaction.editReply({
               content: `Session officially shut down. Session Ended panel has been posted in <#${targetChannel.id}>.`
             });
@@ -1663,7 +1962,7 @@ client.on(Events.InteractionCreate, async interaction => {
           }
 
           const targetChannel = interaction.options.getChannel('channel')
-            || (CONFIG.SESSION.CHANNEL_ID ? await client.channels.fetch(CONFIG.SESSION.CHANNEL_ID).catch(() => null) : null)
+            || (CONFIG.SESSION.CHANNEL_ID ? await interaction.client.channels.fetch(CONFIG.SESSION.CHANNEL_ID).catch(() => null) : null)
             || interaction.channel;
 
           try {
@@ -1825,7 +2124,7 @@ client.on(Events.InteractionCreate, async interaction => {
           }
 
           try {
-            await endGiveaway(client, giveaway.id);
+            await endGiveaway(interaction.client, giveaway.id);
             return interaction.editReply({
               content: `${GIVEAWAY_EMOJI} Giveaway for **${giveaway.prize}** has been concluded.`
             });
@@ -1857,7 +2156,7 @@ client.on(Events.InteractionCreate, async interaction => {
           const winnersCount = interaction.options.getInteger('winners') || giveaway.winnerCount || 1;
 
           try {
-            const newWinners = await rerollGiveaway(client, giveaway.id, winnersCount);
+            const newWinners = await rerollGiveaway(interaction.client, giveaway.id, winnersCount);
             const winnerPings = newWinners.map(id => `<@${id}>`).join(', ');
             return interaction.editReply({
               content: `${GIVEAWAY_EMOJI} Successfully rerolled giveaway. New winner(s): ${winnerPings}`
@@ -1884,7 +2183,8 @@ client.on(Events.InteractionCreate, async interaction => {
           }
 
           const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
-          const panelPayload = buildApplicationPanel();
+          const botInst = getBotInstanceForGuild(interaction.guildId);
+          const panelPayload = buildApplicationPanel(botInst?.customizations);
 
           try {
             await targetChannel.send(panelPayload);
@@ -2023,8 +2323,9 @@ client.on(Events.InteractionCreate, async interaction => {
           });
         }
         const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        const botInst = getBotInstanceForGuild(interaction.guildId);
         try {
-          const payload = buildStaffDocsHubPayload();
+          const payload = buildStaffDocsHubPayload(botInst?.customizations);
           await targetChannel.send(payload);
           return interaction.editReply({
             content: `Successfully dispatched the Staff Documentation Hub to <#${targetChannel.id}>!`
@@ -2080,9 +2381,10 @@ client.on(Events.InteractionCreate, async interaction => {
         const PROMOTIONS_CHANNEL_ID = '1550709402896568320';
         let targetChannel = interaction.options.getChannel('channel') ||
           interaction.guild.channels.cache.get(PROMOTIONS_CHANNEL_ID) ||
-          await client.channels.fetch(PROMOTIONS_CHANNEL_ID).catch(() => null) ||
+          await interaction.client.channels.fetch(PROMOTIONS_CHANNEL_ID).catch(() => null) ||
           interaction.channel;
 
+        const botInst = getBotInstanceForGuild(interaction.guildId);
         try {
           const promoCard = buildPromotionCard({
             user: targetUser,
@@ -2090,7 +2392,8 @@ client.on(Events.InteractionCreate, async interaction => {
             oldRank: oldRank !== 'Promoted Staff' ? oldRank : null,
             reason,
             promotedBy: interaction.user,
-            role: newRole
+            role: newRole,
+            bannerUrl: botInst?.customizations?.promoteBannerUrl
           });
           await targetChannel.send(promoCard);
 
@@ -2127,16 +2430,18 @@ client.on(Events.InteractionCreate, async interaction => {
         const INFRACTIONS_CHANNEL_ID = '1550709451152162887';
         let targetChannel = interaction.options.getChannel('channel') ||
           interaction.guild.channels.cache.get(INFRACTIONS_CHANNEL_ID) ||
-          await client.channels.fetch(INFRACTIONS_CHANNEL_ID).catch(() => null) ||
+          await interaction.client.channels.fetch(INFRACTIONS_CHANNEL_ID).catch(() => null) ||
           interaction.channel;
 
+        const botInst = getBotInstanceForGuild(interaction.guildId);
         try {
           const infractCard = buildInfractionCard({
             user: targetUser,
             type,
             reason,
             proof,
-            issuedBy: interaction.user
+            issuedBy: interaction.user,
+            bannerUrl: botInst?.customizations?.infractBannerUrl
           });
           await targetChannel.send(infractCard);
           return interaction.editReply({
@@ -2194,7 +2499,7 @@ client.on(Events.InteractionCreate, async interaction => {
         const logChannelId = '1548336007311527996';
         let reviewSent = false;
         try {
-          const logChannel = await client.channels.fetch(logChannelId).catch(() => null) ||
+          const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null) ||
             interaction.guild.channels.cache.find(c => c.name.toLowerCase().includes('loa') && c.isTextBased());
           if (logChannel) {
             const cardPayload = buildLoaSubmissionCard(record);
@@ -2222,7 +2527,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
       // /commands
       if (interaction.commandName === 'commands') {
-        const payload = buildCommandsDirectoryPayload(client, 0, interaction.guildId);
+        const payload = buildCommandsDirectoryPayload(interaction.client, 0, interaction.guildId);
         await interaction.reply(payload);
         setTimeout(() => {
           interaction.deleteReply().catch(() => null);
@@ -2298,7 +2603,8 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
 
-        const panelPayload = buildTicketPanel();
+        const botInst = getBotInstanceForGuild(interaction.guild?.id);
+        const panelPayload = buildTicketPanel(null, botInst?.customizations);
 
         try {
           const sentMessage = await targetChannel.send(panelPayload);
@@ -2535,6 +2841,15 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 2. CATEGORY SELECT MENU (TICKET CREATION MODAL TRIGGER)                */
     /* ---------------------------------------------------------------------- */
     if (interaction.isStringSelectMenu()) {
+      // /config category navigation select menu
+      if (interaction.customId.startsWith('cfg_select_page_')) {
+        await interaction.deferUpdate().catch(() => null);
+        const botId = interaction.customId.replace('cfg_select_page_', '');
+        const targetPage = parseInt(interaction.values[0], 10) || 1;
+        const payload = buildConfigPanelPayload(botId, targetPage);
+        return interaction.editReply(payload).catch(() => null);
+      }
+
       // Staff Documentation Dropdown Selector (strictly zero emojis)
       if (interaction.customId === 'staff_docs_select') {
         const sectionId = interaction.values[0];
@@ -2654,6 +2969,421 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 3. MODAL SUBMISSIONS                                                   */
     /* ---------------------------------------------------------------------- */
     if (interaction.isModalSubmit()) {
+      // Configuration Credentials Modal Submit (Page 1)
+      if (interaction.customId.startsWith('cfg_modal_creds_')) {
+        await interaction.deferUpdate().catch(() => null);
+        const botId = interaction.customId.replace('cfg_modal_creds_', '');
+        const token = interaction.fields.getTextInputValue('token').trim();
+        const erlcApiKey = interaction.fields.getTextInputValue('erlcApiKey').trim();
+
+        updateBotInstance(botId, { token, erlcApiKey, status: 'active', setupCompleted: true });
+
+        startCustomerBot(botId).catch(err => {
+          console.warn(`[CUSTOMER BOT] Error starting bot ${botId}:`, err.message);
+        });
+
+        const payload = buildConfigPanelPayload(botId, 1);
+        return interaction.editReply(payload).catch(() => null);
+      }
+
+      // Configuration Server Core Modal Submit (Page 1)
+      if (interaction.customId.startsWith('cfg_modal_servercore_')) {
+        const botId = interaction.customId.replace('cfg_modal_servercore_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const serverName = getVal('serverName');
+        const joinCode = getVal('joinCode');
+
+        if (serverName) updateBotCustomization(botId, 'serverName', serverName);
+        if (joinCode) updateBotCustomization(botId, 'joinCode', joinCode);
+
+        const payload = buildConfigPanelPayload(botId, 1);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Ticket Category Names Modal Submit (Page 2)
+      if (interaction.customId.startsWith('cfg_modal_ticketcatnames_')) {
+        const botId = interaction.customId.replace('cfg_modal_ticketcatnames_', '');
+        const bot = getBotInstance(botId);
+        const cust = bot?.customizations || {};
+        const currentCats = Array.isArray(cust.ticketCategories) ? [...cust.ticketCategories] : [];
+
+        const newCats = [];
+        for (let i = 1; i <= 5; i++) {
+          const rawName = interaction.fields.fields.get(`cat_name_${i}`)?.value?.trim();
+          if (rawName) {
+            const existing = currentCats[i - 1] || {};
+            newCats.push({
+              id: existing.id || `cat_${i}`,
+              name: rawName,
+              spawnCategoryId: existing.spawnCategoryId || '',
+              pingRoleId: existing.pingRoleId || ''
+            });
+          }
+        }
+        if (newCats.length > 0) {
+          updateBotCustomization(botId, 'ticketCategories', newCats);
+        }
+        const payload = buildConfigPanelPayload(botId, 2);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Ticket Category Spawns Modal Submit (Page 2)
+      if (interaction.customId.startsWith('cfg_modal_ticketcatspawns_')) {
+        const botId = interaction.customId.replace('cfg_modal_ticketcatspawns_', '');
+        const bot = getBotInstance(botId);
+        const cust = bot?.customizations || {};
+        const currentCats = Array.isArray(cust.ticketCategories) ? [...cust.ticketCategories] : [
+          { id: "cat_1", name: "General Support", spawnCategoryId: "", pingRoleId: "" },
+          { id: "cat_2", name: "High Rank", spawnCategoryId: "", pingRoleId: "" }
+        ];
+
+        for (let i = 1; i <= 5; i++) {
+          const rawSpawn = interaction.fields.fields.get(`cat_spawn_${i}`)?.value?.trim();
+          if (currentCats[i - 1]) {
+            currentCats[i - 1].spawnCategoryId = rawSpawn || '';
+          }
+        }
+        updateBotCustomization(botId, 'ticketCategories', currentCats);
+
+        const payload = buildConfigPanelPayload(botId, 2);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Ticket Category Ping Roles Modal Submit (Page 2)
+      if (interaction.customId.startsWith('cfg_modal_ticketcatpings_')) {
+        const botId = interaction.customId.replace('cfg_modal_ticketcatpings_', '');
+        const bot = getBotInstance(botId);
+        const cust = bot?.customizations || {};
+        const currentCats = Array.isArray(cust.ticketCategories) ? [...cust.ticketCategories] : [
+          { id: "cat_1", name: "General Support", spawnCategoryId: "", pingRoleId: "" },
+          { id: "cat_2", name: "High Rank", spawnCategoryId: "", pingRoleId: "" }
+        ];
+
+        for (let i = 1; i <= 5; i++) {
+          const rawPing = interaction.fields.fields.get(`cat_ping_${i}`)?.value?.trim();
+          if (currentCats[i - 1]) {
+            currentCats[i - 1].pingRoleId = rawPing || '';
+          }
+        }
+        updateBotCustomization(botId, 'ticketCategories', currentCats);
+
+        const payload = buildConfigPanelPayload(botId, 2);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Ticket Banners & Settings Modal Submit (Page 2)
+      if (interaction.customId.startsWith('cfg_modal_ticketbanners_')) {
+        const botId = interaction.customId.replace('cfg_modal_ticketbanners_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const topBannerUrl = getVal('topBannerUrl');
+        const bottomBannerUrl = getVal('bottomBannerUrl');
+        const transcriptsChannelId = getVal('transcriptsChannelId');
+        const ticketCategoryId = getVal('ticketCategoryId');
+        const ticketPingRoleId = getVal('ticketPingRoleId');
+
+        updateBotCustomization(botId, 'topBannerUrl', topBannerUrl);
+        updateBotCustomization(botId, 'bottomBannerUrl', bottomBannerUrl);
+        if (transcriptsChannelId) updateBotCustomization(botId, 'transcriptsChannelId', transcriptsChannelId);
+        if (ticketCategoryId) updateBotCustomization(botId, 'ticketCategoryId', ticketCategoryId);
+        if (ticketPingRoleId) updateBotCustomization(botId, 'ticketPingRoleId', ticketPingRoleId);
+
+        const payload = buildConfigPanelPayload(botId, 2);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Support Text & Rules Modal Submit (Page 2)
+      if (interaction.customId.startsWith('cfg_modal_text_')) {
+        const botId = interaction.customId.replace('cfg_modal_text_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const panelTitle = getVal('panelTitle');
+        const panelDescription = getVal('panelDescription');
+        const rulesDescription = getVal('rulesDescription');
+
+        if (panelTitle) updateBotCustomization(botId, 'panelTitle', panelTitle);
+        if (panelDescription) updateBotCustomization(botId, 'panelDescription', panelDescription);
+        if (rulesDescription) updateBotCustomization(botId, 'rulesDescription', rulesDescription);
+
+        const payload = buildConfigPanelPayload(botId, 2);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Session Channels & Roles Modal Submit (Page 3)
+      if (interaction.customId.startsWith('cfg_modal_sessionchannels_')) {
+        const botId = interaction.customId.replace('cfg_modal_sessionchannels_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const sessionChannelId = getVal('sessionChannelId');
+        const ingameVcId = getVal('ingameVcId');
+        const queueVcId = getVal('queueVcId');
+        const notificationRoleId = getVal('notificationRoleId');
+        const hostRoleId = getVal('hostRoleId');
+
+        if (sessionChannelId) updateBotCustomization(botId, 'sessionChannelId', sessionChannelId);
+        if (ingameVcId) updateBotCustomization(botId, 'ingameVcId', ingameVcId);
+        if (queueVcId) updateBotCustomization(botId, 'queueVcId', queueVcId);
+        if (notificationRoleId) updateBotCustomization(botId, 'notificationRoleId', notificationRoleId);
+        if (hostRoleId) updateBotCustomization(botId, 'hostRoleId', hostRoleId);
+
+        const payload = buildConfigPanelPayload(botId, 3);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Session Banners Modal Submit (Page 3)
+      if (interaction.customId.startsWith('cfg_modal_sessionbanners_')) {
+        const botId = interaction.customId.replace('cfg_modal_sessionbanners_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const sessionTopBannerUrl = getVal('sessionTopBannerUrl');
+        const sessionShutdownBannerUrl = getVal('sessionShutdownBannerUrl');
+        const sessionBottomBannerUrl = getVal('sessionBottomBannerUrl');
+
+        updateBotCustomization(botId, 'sessionTopBannerUrl', sessionTopBannerUrl);
+        updateBotCustomization(botId, 'sessionShutdownBannerUrl', sessionShutdownBannerUrl);
+        updateBotCustomization(botId, 'sessionBottomBannerUrl', sessionBottomBannerUrl);
+
+        const payload = buildConfigPanelPayload(botId, 3);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Session Embed Text Modal Submit (Page 3)
+      if (interaction.customId.startsWith('cfg_modal_sessiontext_')) {
+        const botId = interaction.customId.replace('cfg_modal_sessiontext_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const sessionStartTitle = getVal('sessionStartTitle');
+        const sessionStartDesc = getVal('sessionStartDesc');
+        const sessionShutdownTitle = getVal('sessionShutdownTitle');
+        const sessionShutdownDesc = getVal('sessionShutdownDesc');
+
+        if (sessionStartTitle) updateBotCustomization(botId, 'sessionStartTitle', sessionStartTitle);
+        if (sessionStartDesc) updateBotCustomization(botId, 'sessionStartDesc', sessionStartDesc);
+        if (sessionShutdownTitle) updateBotCustomization(botId, 'sessionShutdownTitle', sessionShutdownTitle);
+        if (sessionShutdownDesc) updateBotCustomization(botId, 'sessionShutdownDesc', sessionShutdownDesc);
+
+        const payload = buildConfigPanelPayload(botId, 3);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Infraction Modal Submit (Page 4)
+      if (interaction.customId.startsWith('cfg_modal_infraction_')) {
+        const botId = interaction.customId.replace('cfg_modal_infraction_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const infractionsChannelId = getVal('infractionsChannelId');
+        const infractBannerUrl = getVal('infractBannerUrl');
+        const infractRemoveRoleId = getVal('infractRemoveRoleId');
+        const infractGiveRoleId = getVal('infractGiveRoleId');
+
+        if (infractionsChannelId) updateBotCustomization(botId, 'infractionsChannelId', infractionsChannelId);
+        if (infractBannerUrl) {
+          updateBotCustomization(botId, 'infractBannerUrl', infractBannerUrl);
+          updateBotCustomization(botId, 'infractionBannerUrl', infractBannerUrl);
+        }
+        if (infractRemoveRoleId) updateBotCustomization(botId, 'infractRemoveRoleId', infractRemoveRoleId);
+        if (infractGiveRoleId) updateBotCustomization(botId, 'infractGiveRoleId', infractGiveRoleId);
+
+        const payload = buildConfigPanelPayload(botId, 4);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Promotion Modal Submit (Page 4)
+      if (interaction.customId.startsWith('cfg_modal_promotion_')) {
+        const botId = interaction.customId.replace('cfg_modal_promotion_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const promotionsChannelId = getVal('promotionsChannelId');
+        const promoteBannerUrl = getVal('promoteBannerUrl');
+        const promotionGiveRoleId = getVal('promotionGiveRoleId');
+
+        if (promotionsChannelId) updateBotCustomization(botId, 'promotionsChannelId', promotionsChannelId);
+        if (promoteBannerUrl) {
+          updateBotCustomization(botId, 'promoteBannerUrl', promoteBannerUrl);
+          updateBotCustomization(botId, 'promotionBannerUrl', promoteBannerUrl);
+        }
+        if (promotionGiveRoleId) updateBotCustomization(botId, 'promotionGiveRoleId', promotionGiveRoleId);
+
+        const payload = buildConfigPanelPayload(botId, 4);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Applications Channels & Text Modal Submit (Page 5)
+      if (interaction.customId.startsWith('cfg_modal_apps_')) {
+        const botId = interaction.customId.replace('cfg_modal_apps_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const reviewChannelId = getVal('reviewChannelId');
+        const resultsChannelId = getVal('resultsChannelId');
+        const appTitle = getVal('appTitle');
+        const appDescription = getVal('appDescription');
+
+        if (reviewChannelId) updateBotCustomization(botId, 'reviewChannelId', reviewChannelId);
+        if (resultsChannelId) updateBotCustomization(botId, 'resultsChannelId', resultsChannelId);
+        if (appTitle) updateBotCustomization(botId, 'appTitle', appTitle);
+        if (appDescription) updateBotCustomization(botId, 'appDescription', appDescription);
+
+        const payload = buildConfigPanelPayload(botId, 5);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Application Banners & Quiz Modal Submit (Page 5)
+      if (interaction.customId.startsWith('cfg_modal_appquiz_')) {
+        const botId = interaction.customId.replace('cfg_modal_appquiz_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const appTopBannerUrl = getVal('appTopBannerUrl');
+        const appBottomBannerUrl = getVal('appBottomBannerUrl');
+        const appQuizIntroText = getVal('appQuizIntroText');
+
+        if (appTopBannerUrl) updateBotCustomization(botId, 'appTopBannerUrl', appTopBannerUrl);
+        if (appBottomBannerUrl) updateBotCustomization(botId, 'appBottomBannerUrl', appBottomBannerUrl);
+        if (appQuizIntroText) updateBotCustomization(botId, 'appQuizIntroText', appQuizIntroText);
+
+        const payload = buildConfigPanelPayload(botId, 5);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Server Documentation Modal Submit (Page 6)
+      if (interaction.customId.startsWith('cfg_modal_docs_')) {
+        const botId = interaction.customId.replace('cfg_modal_docs_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const deptChannelId = getVal('deptChannelId');
+        const deptBannerUrl = getVal('deptBannerUrl');
+        const regulationsChannelId = getVal('regulationsChannelId');
+        const regulationsBannerUrl = getVal('regulationsBannerUrl');
+        const staffDocsChannelId = getVal('staffDocsChannelId');
+
+        if (deptChannelId) updateBotCustomization(botId, 'deptChannelId', deptChannelId);
+        if (deptBannerUrl) updateBotCustomization(botId, 'deptBannerUrl', deptBannerUrl);
+        if (regulationsChannelId) updateBotCustomization(botId, 'regulationsChannelId', regulationsChannelId);
+        if (regulationsBannerUrl) updateBotCustomization(botId, 'regulationsBannerUrl', regulationsBannerUrl);
+        if (staffDocsChannelId) updateBotCustomization(botId, 'staffDocsChannelId', staffDocsChannelId);
+
+        const payload = buildConfigPanelPayload(botId, 6);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Welcome Modal Submit (Page 7)
+      if (interaction.customId.startsWith('cfg_modal_welcome_')) {
+        const botId = interaction.customId.replace('cfg_modal_welcome_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const welcomeChannelId = getVal('welcomeChannelId');
+        const welcomeBannerUrl = getVal('welcomeBannerUrl');
+        const welcomeText = getVal('welcomeText');
+
+        if (welcomeChannelId) updateBotCustomization(botId, 'welcomeChannelId', welcomeChannelId);
+        if (welcomeBannerUrl) updateBotCustomization(botId, 'welcomeBannerUrl', welcomeBannerUrl);
+        if (welcomeText) updateBotCustomization(botId, 'welcomeText', welcomeText);
+
+        const payload = buildConfigPanelPayload(botId, 7);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration AI Key Modal Submit (Page 8)
+      if (interaction.customId.startsWith('cfg_modal_aikey_')) {
+        const botId = interaction.customId.replace('cfg_modal_aikey_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const aiApiKey = getVal('aiApiKey');
+        let aiProvider = getVal('aiProvider').toLowerCase();
+
+        if (!aiProvider && aiApiKey) {
+          aiProvider = aiApiKey.startsWith('sk-or-') ? 'openrouter' : (aiApiKey.startsWith('gsk_') ? 'groq' : (aiApiKey.startsWith('AIza') ? 'gemini' : 'openai'));
+        }
+
+        updateBotInstance(botId, { aiProvider: aiProvider || 'openrouter', aiApiKey });
+        updateBotCustomization(botId, 'aiProvider', aiProvider || 'openrouter');
+        updateBotCustomization(botId, 'aiApiKey', aiApiKey);
+
+        const payload = buildConfigPanelPayload(botId, 8);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          console.error('[CONFIG MODAL AI KEY ERROR]:', err);
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Ask AI Modal Submit
+      if (interaction.customId.startsWith('cfg_modal_askai_')) {
+        const botId = interaction.customId.replace('cfg_modal_askai_', '');
+        const prompt = interaction.fields.getTextInputValue('prompt').trim();
+
+        await interaction.deferReply({ flags: 64 }).catch(() => null);
+
+        const result = await processAiConfigRequest({
+          botId,
+          prompt,
+          userId: interaction.user.id
+        });
+
+        if (result.success) {
+          let replyContent = `### AI Configuration Assistant\n> ${result.reply.split('\n').join('\n> ')}`;
+          if (result.changes && result.changes.length > 0) {
+            replyContent += `\n\n### Applied Changes\n` + result.changes.map(c => `> • **${c.field}**: \`${c.value}\``).join('\n');
+          }
+          return interaction.editReply({
+            content: replyContent
+          }).catch(err => console.error('[ASK AI REPLY ERROR]:', err));
+        } else {
+          return interaction.editReply({
+            content: `<:Cross:1396397536478105672> **Configuration Error:** ${result.message}`
+          }).catch(err => console.error('[ASK AI ERROR REPLY]:', err));
+        }
+      }
+
+
       // LOA Denial Reason Modal Submit
       if (interaction.customId.startsWith('modal_loa_deny_')) {
         const loaId = interaction.customId.replace('modal_loa_deny_', '');
@@ -2681,7 +3411,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Update the submission message in review channel
         if (record.reviewMessageId) {
           try {
-            const ch = await client.channels.fetch(record.reviewChannelId || '1548336007311527996').catch(() => null);
+            const ch = await interaction.client.channels.fetch(record.reviewChannelId || '1548336007311527996').catch(() => null);
             if (ch) {
               const msg = await ch.messages.fetch(record.reviewMessageId).catch(() => null);
               if (msg) {
@@ -2712,11 +3442,23 @@ client.on(Events.InteractionCreate, async interaction => {
       // Handle Ticket Opening Modal
       if (interaction.customId.startsWith('modal_open_')) {
         const categoryId = interaction.customId.replace('modal_open_', '');
-        const category = CONFIG.CATEGORIES.find(c => c.id === categoryId) || {
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+        const configuredCats = Array.isArray(cust?.ticketCategories) ? cust.ticketCategories : [];
+        const customCat = configuredCats.find(c => c.id === categoryId);
+        const fallbackCat = CONFIG.CATEGORIES.find(c => c.id === categoryId);
+
+        const category = customCat ? {
+          id: customCat.id,
+          label: customCat.name,
+          categoryId: customCat.spawnCategoryId || cust.ticketCategoryId || null,
+          pingRoleId: customCat.pingRoleId || cust.ticketPingRoleId || null
+        } : (fallbackCat || {
           id: categoryId,
           label: 'Support',
-          categoryId: null
-        };
+          categoryId: cust.ticketCategoryId || null,
+          pingRoleId: cust.ticketPingRoleId || null
+        });
 
         const reason = interaction.fields.getTextInputValue('ticket_reason');
 
@@ -2725,7 +3467,8 @@ client.on(Events.InteractionCreate, async interaction => {
         const cleanUsername = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         const channelName = `ticket-${cleanUsername || 'inquiry'}`;
 
-        // Build channel permission overwrites
+        // Build channel permission overwrites safely using interaction.client.user.id
+        const botUserId = (interaction.client || client).user.id;
         const permissionOverwrites = [
           {
             id: interaction.guild.roles.everyone.id,
@@ -2742,7 +3485,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           },
           {
-            id: client.user.id,
+            id: botUserId,
             allow: [
               PermissionFlagsBits.ViewChannel,
               PermissionFlagsBits.SendMessages,
@@ -2755,9 +3498,42 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         ];
 
-        // Add staff roles to channel overwrites
+        // Add staff and category ping roles to overwrites
+        const addedRoles = new Set();
+
+        // 1. Specific category ping role (e.g. High Rank, General Support)
+        if (category.pingRoleId && interaction.guild.roles.cache.has(category.pingRoleId)) {
+          permissionOverwrites.push({
+            id: category.pingRoleId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.EmbedLinks
+            ]
+          });
+          addedRoles.add(category.pingRoleId);
+        }
+
+        // 2. Fallback ticket ping role from bot configuration
+        if (cust.ticketPingRoleId && interaction.guild.roles.cache.has(cust.ticketPingRoleId) && !addedRoles.has(cust.ticketPingRoleId)) {
+          permissionOverwrites.push({
+            id: cust.ticketPingRoleId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory,
+              PermissionFlagsBits.AttachFiles,
+              PermissionFlagsBits.EmbedLinks
+            ]
+          });
+          addedRoles.add(cust.ticketPingRoleId);
+        }
+
+        // 3. Fallback standard staff roles (only if present in the current guild)
         for (const roleId of CONFIG.STAFF_ROLE_IDS) {
-          if (roleId && !roleId.includes('PASTE') && interaction.guild.roles.cache.has(roleId)) {
+          if (roleId && !roleId.includes('PASTE') && interaction.guild.roles.cache.has(roleId) && !addedRoles.has(roleId)) {
             permissionOverwrites.push({
               id: roleId,
               allow: [
@@ -2768,14 +3544,16 @@ client.on(Events.InteractionCreate, async interaction => {
                 PermissionFlagsBits.EmbedLinks
               ]
             });
+            addedRoles.add(roleId);
           }
         }
 
-        // Determine parent category ID (supports Orlando server and testing server)
+        // Determine parent category folder ID (from category spawn or bot fallback)
         let parentCategoryId = null;
-        const candidateCategoryIds = Array.isArray(category.categoryIds)
-          ? category.categoryIds
-          : [category.categoryId].filter(Boolean);
+        const candidateCategoryIds = [];
+        if (category.categoryId) candidateCategoryIds.push(category.categoryId);
+        if (cust.ticketCategoryId) candidateCategoryIds.push(cust.ticketCategoryId);
+        if (Array.isArray(category.categoryIds)) candidateCategoryIds.push(...category.categoryIds);
 
         for (const catId of candidateCategoryIds) {
           if (catId) {
@@ -2810,11 +3588,7 @@ client.on(Events.InteractionCreate, async interaction => {
         };
 
         // Ping the user and valid staff roles
-        const staffPings = CONFIG.STAFF_ROLE_IDS
-          .filter(r => r && !r.includes('PASTE') && interaction.guild.roles.cache.has(r))
-          .map(r => `<@&${r}>`)
-          .join(' ');
-
+        const staffPings = Array.from(addedRoles).map(r => `<@&${r}>`).join(' ');
         const pingMessage = `<@${interaction.user.id}> ${staffPings}`.trim();
         await ticketChannel.send({ content: pingMessage });
 
@@ -2893,7 +3667,7 @@ client.on(Events.InteractionCreate, async interaction => {
             }
           )
           .setFooter({
-            text: 'Orlando RP Management Desk • Official Report'
+            text: 'ERLCX Management Desk • Official Report'
           })
           .setTimestamp();
 
@@ -2924,7 +3698,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Update the log message in the transcripts channel if it exists
         if (CONFIG.TRANSCRIPTS_CHANNEL_ID && updatedRecord.logMessageId) {
           try {
-            const logChannel = await client.channels.fetch(CONFIG.TRANSCRIPTS_CHANNEL_ID).catch(() => null);
+            const logChannel = await interaction.client.channels.fetch(CONFIG.TRANSCRIPTS_CHANNEL_ID).catch(() => null);
             if (logChannel) {
               const logMsg = await logChannel.messages.fetch(updatedRecord.logMessageId).catch(() => null);
               if (logMsg) {
@@ -3062,7 +3836,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Post public acceptance announcement to results channel (1550413729013829725)
         try {
           const resultsChanId = getResultsChannelId();
-          const resultsChan = await client.channels.fetch(resultsChanId).catch(() => null);
+          const resultsChan = await interaction.client.channels.fetch(resultsChanId).catch(() => null);
           if (resultsChan && resultsChan.isTextBased()) {
             const resultPayload = buildApplicationResultV2(updatedSubmission);
             try {
@@ -3122,7 +3896,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Post public denial announcement to results channel (1550413729013829725)
         try {
           const resultsChanId = getResultsChannelId();
-          const resultsChan = await client.channels.fetch(resultsChanId).catch(() => null);
+          const resultsChan = await interaction.client.channels.fetch(resultsChanId).catch(() => null);
           if (resultsChan && resultsChan.isTextBased()) {
             const resultPayload = buildApplicationResultV2(updatedSubmission);
             try {
@@ -3163,6 +3937,212 @@ client.on(Events.InteractionCreate, async interaction => {
     /* 4. BUTTON INTERACTIONS                                                 */
     /* ---------------------------------------------------------------------- */
     if (interaction.isButton()) {
+      // Config Navigation Buttons
+      if (interaction.customId.startsWith('cfg_nav_prev_')) {
+        const parts = interaction.customId.replace('cfg_nav_prev_', '').split('_');
+        const botId = parts[0];
+        const curPage = parseInt(parts[1], 10) || 1;
+        const targetPage = Math.max(1, curPage - 1);
+        const payload = buildConfigPanelPayload(botId, targetPage);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          console.error('[CONFIG NAV PREV ERROR]:', err);
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      if (interaction.customId.startsWith('cfg_nav_next_')) {
+        const parts = interaction.customId.replace('cfg_nav_next_', '').split('_');
+        const botId = parts[0];
+        const curPage = parseInt(parts[1], 10) || 1;
+        const targetPage = Math.min(TOTAL_PAGES, curPage + 1);
+        const payload = buildConfigPanelPayload(botId, targetPage);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          console.error('[CONFIG NAV NEXT ERROR]:', err);
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      if (interaction.customId.startsWith('cfg_nav_refresh_')) {
+        const parts = interaction.customId.replace('cfg_nav_refresh_', '').split('_');
+        const botId = parts[0];
+        const curPage = parseInt(parts[1], 10) || 1;
+        const payload = buildConfigPanelPayload(botId, curPage);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          console.error('[CONFIG NAV REFRESH ERROR]:', err);
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_resetbanners_')) {
+        const botId = interaction.customId.replace('cfg_btn_resetbanners_', '');
+        updateBotCustomization(botId, 'topBannerUrl', null);
+        updateBotCustomization(botId, 'bottomBannerUrl', null);
+        updateBotCustomization(botId, 'sessionTopBannerUrl', null);
+        updateBotCustomization(botId, 'sessionShutdownBannerUrl', null);
+        updateBotCustomization(botId, 'sessionBottomBannerUrl', null);
+        const payload = buildConfigPanelPayload(botId, 3);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          console.error('[RESET BANNERS ERROR]:', err);
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // ─── CONFIGURATION MODAL OPENERS (8 DOMAIN PAGES) ─────────────────
+      // Page 1: Credentials & Server Core Identity
+      if (interaction.customId.startsWith('cfg_btn_creds_')) {
+        const botId = interaction.customId.replace('cfg_btn_creds_', '');
+        return interaction.showModal(buildCredentialsModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (creds):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_servercore_') || interaction.customId.startsWith('cfg_btn_joincode_')) {
+        const botId = interaction.customId.replace('cfg_btn_servercore_', '').replace('cfg_btn_joincode_', '');
+        return interaction.showModal(buildServerCoreModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (servercore):`, err.message);
+        });
+      }
+
+      // Page 2: Ticket Categories (Names, Spawns, Pings), Banners & Text
+      if (interaction.customId.startsWith('cfg_btn_ticketcatnames_')) {
+        const botId = interaction.customId.replace('cfg_btn_ticketcatnames_', '');
+        return interaction.showModal(buildTicketCategoryNamesModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (ticketcatnames):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_ticketcatspawns_')) {
+        const botId = interaction.customId.replace('cfg_btn_ticketcatspawns_', '');
+        return interaction.showModal(buildTicketCategorySpawnsModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (ticketcatspawns):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_ticketcatpings_')) {
+        const botId = interaction.customId.replace('cfg_btn_ticketcatpings_', '');
+        return interaction.showModal(buildTicketCategoryPingsModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (ticketcatpings):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_ticketbanners_')) {
+        const botId = interaction.customId.replace('cfg_btn_ticketbanners_', '');
+        return interaction.showModal(buildTicketBannersModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (ticketbanners):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_text_')) {
+        const botId = interaction.customId.replace('cfg_btn_text_', '');
+        return interaction.showModal(buildSupportTextModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (text):`, err.message);
+        });
+      }
+
+      // Page 3: Live Operations & Sessions
+      if (interaction.customId.startsWith('cfg_btn_sessionchannels_')) {
+        const botId = interaction.customId.replace('cfg_btn_sessionchannels_', '');
+        return interaction.showModal(buildSessionChannelsModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (sessionchannels):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_sessionbanners_')) {
+        const botId = interaction.customId.replace('cfg_btn_sessionbanners_', '');
+        return interaction.showModal(buildSessionBannersModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (sessionbanners):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_sessiontext_') || interaction.customId.startsWith('cfg_btn_session_')) {
+        const botId = interaction.customId.replace('cfg_btn_sessiontext_', '').replace('cfg_btn_session_', '');
+        return interaction.showModal(buildSessionTextModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (sessiontext):`, err.message);
+        });
+      }
+
+      // Page 4: Moderation System (Infractions & Promotions)
+      if (interaction.customId.startsWith('cfg_btn_infractioncfg_')) {
+        const botId = interaction.customId.replace('cfg_btn_infractioncfg_', '');
+        return interaction.showModal(buildInfractionConfigModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (infractioncfg):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_promotioncfg_')) {
+        const botId = interaction.customId.replace('cfg_btn_promotioncfg_', '');
+        return interaction.showModal(buildPromotionConfigModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (promotioncfg):`, err.message);
+        });
+      }
+
+      // Page 5: Staff Applications & In-Game Quiz
+      if (interaction.customId.startsWith('cfg_btn_apps_')) {
+        const botId = interaction.customId.replace('cfg_btn_apps_', '');
+        return interaction.showModal(buildAppsModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (apps):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_appquizcfg_') || interaction.customId.startsWith('cfg_btn_apptext_')) {
+        const botId = interaction.customId.replace('cfg_btn_appquizcfg_', '').replace('cfg_btn_apptext_', '');
+        return interaction.showModal(buildAppQuizModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (appquizcfg):`, err.message);
+        });
+      }
+
+      // Page 6: Server Documentation & Policies
+      if (interaction.customId.startsWith('cfg_btn_docs_')) {
+        const botId = interaction.customId.replace('cfg_btn_docs_', '');
+        return interaction.showModal(buildDocsModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (docs):`, err.message);
+        });
+      }
+
+      // Page 7: Welcome System
+      if (interaction.customId.startsWith('cfg_btn_togglewelcome_')) {
+        const botId = interaction.customId.replace('cfg_btn_togglewelcome_', '');
+        const bot = getBotInstance(botId);
+        const curStatus = Boolean(bot?.customizations?.welcomeEnabled);
+        updateBotCustomization(botId, 'welcomeEnabled', !curStatus);
+        const payload = buildConfigPanelPayload(botId, 7);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_welcome_')) {
+        const botId = interaction.customId.replace('cfg_btn_welcome_', '');
+        return interaction.showModal(buildWelcomeModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (welcome):`, err.message);
+        });
+      }
+
+      // Page 8: AI Configuration Assistant
+      if (interaction.customId.startsWith('cfg_btn_aikey_')) {
+        const botId = interaction.customId.replace('cfg_btn_aikey_', '');
+        return interaction.showModal(buildAiKeyModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (aikey):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_askai_') || interaction.customId.startsWith('cfg_btn_ai_modal_')) {
+        const botId = interaction.customId.replace('cfg_btn_askai_', '').replace('cfg_btn_ai_modal_', '');
+        return interaction.showModal(buildAskAiModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (askai):`, err.message);
+        });
+      }
+
       // LOA Review Accept Button
       if (interaction.customId.startsWith('loa_btn_accept_')) {
         if (!isStaff(interaction.member, interaction)) {
@@ -3268,14 +4248,14 @@ client.on(Events.InteractionCreate, async interaction => {
       if (interaction.customId.startsWith('cmd_page_prev_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_prev_', ''), 10) || 0;
         const newPage = Math.max(0, curPage - 1);
-        const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
+        const payload = buildCommandsDirectoryPayload(interaction.client, newPage, interaction.guildId);
         return interaction.update(payload).catch(() => null);
       }
 
       if (interaction.customId.startsWith('cmd_page_next_')) {
         const curPage = parseInt(interaction.customId.replace('cmd_page_next_', ''), 10) || 0;
         const newPage = Math.min(4, curPage + 1);
-        const payload = buildCommandsDirectoryPayload(client, newPage, interaction.guildId);
+        const payload = buildCommandsDirectoryPayload(interaction.client, newPage, interaction.guildId);
         return interaction.update(payload).catch(() => null);
       }
 
@@ -3363,13 +4343,13 @@ client.on(Events.InteractionCreate, async interaction => {
           {
             type: 10,
             content:
-              `## Orlando Roleplay | Application Submitted\n` +
+              `## ERLCX | Application Submitted\n` +
               `> Your **${roleName}** application has been transmitted to the Executive Team for review.\n\n` +
               `### Application Details\n` +
               `> • **Status:** Submitted & Pending Review\n` +
               `> • **Reference ID:** \`${submissionId.slice(0, 8).toUpperCase()}\`\n` +
               `> • **Notifications:** You will receive a direct message notification here once a decision has been reached.\n\n` +
-              `> *Inquiries regarding the status of your application will result in denial. Thank you for applying to Orlando Roleplay.*`
+              `> *Inquiries regarding the status of your application will result in denial. Thank you for applying to ERLCX.*`
           }
         ];
 
@@ -3387,7 +4367,7 @@ client.on(Events.InteractionCreate, async interaction => {
         // Post to Staff Review Channel (1550446015859925012)
         const reviewChannelId = getReviewChannelId();
         try {
-          const reviewChannel = await client.channels.fetch(reviewChannelId).catch(() => null);
+          const reviewChannel = await interaction.client.channels.fetch(reviewChannelId).catch(() => null);
           if (reviewChannel) {
             const reviewPayload = buildStaffReviewCard(submission, 0);
             const sentMsg = await reviewChannel.send(reviewPayload);
@@ -3416,7 +4396,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 {
                   type: 10,
                   content:
-                    `## Orlando Roleplay | Application Cancelled\n` +
+                    `## ERLCX | Application Cancelled\n` +
                     `> Your staff application session has been cancelled.\n` +
                     `> You may start a new application at any time from the server panel.`
                 }
@@ -3471,7 +4451,7 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         // Resolve Guild context (supports clicking from DM or server)
-        const guild = interaction.guild || client.guilds.cache.get('1541210827967823955') || client.guilds.cache.first();
+        const guild = interaction.guild || interaction.client.guilds.cache.get('1541210827967823955') || interaction.client.guilds.cache.first();
         if (!guild) {
           return interaction.reply({
             content: 'Could not resolve server to create your training ticket.',
@@ -3543,7 +4523,7 @@ client.on(Events.InteractionCreate, async interaction => {
             ]
           },
           {
-            id: client.user.id,
+            id: (interaction.client || client).user.id,
             allow: [
               PermissionFlagsBits.ViewChannel,
               PermissionFlagsBits.SendMessages,
@@ -3720,7 +4700,8 @@ client.on(Events.InteractionCreate, async interaction => {
       // Rules Button (shows rules and marks user as having read them)
       if (interaction.customId === 'ticket_btn_rules') {
         markUserReadRules(interaction.user.id);
-        const rulesPayload = buildRulesEmbed();
+        const botInst = getBotInstanceForGuild(interaction.guildId);
+        const rulesPayload = buildRulesEmbed(botInst?.customizations);
         return interaction.reply(rulesPayload);
       }
 
@@ -3828,7 +4809,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         // Update vote container message
         try {
-          const voteChannel = await client.channels.fetch(vote.channelId).catch(() => null);
+          const voteChannel = await interaction.client.channels.fetch(vote.channelId).catch(() => null);
           if (voteChannel && vote.messageId) {
             const voteMsg = await voteChannel.messages.fetch(vote.messageId).catch(() => null);
             if (voteMsg) {
@@ -3847,7 +4828,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
           // Update vote message to Goal Reached
           try {
-            const voteChannel = await client.channels.fetch(vote.channelId).catch(() => null);
+            const voteChannel = await interaction.client.channels.fetch(vote.channelId).catch(() => null);
             if (voteChannel && vote.messageId) {
               const voteMsg = await voteChannel.messages.fetch(vote.messageId).catch(() => null);
               if (voteMsg) {
@@ -3859,7 +4840,7 @@ client.on(Events.InteractionCreate, async interaction => {
           // Automatically post live session panel to #sessions and clean up offline panel
           try {
             const sessionChannelId = CONFIG.SESSION.CHANNEL_ID || vote.channelId;
-            await activateLiveSessionPanel(client, sessionChannelId);
+            await activateLiveSessionPanel(interaction.client, sessionChannelId);
           } catch (panelErr) {
             console.error('Failed to auto-post session panel on vote completion:', panelErr);
           }
@@ -3877,7 +4858,7 @@ client.on(Events.InteractionCreate, async interaction => {
                 .setImage(CONFIG.SESSION.VOTE_TOP_BANNER_URL)
                 .setTitle('Session Vote Completed — Action Required')
                 .setDescription(
-                  `> The session vote in **Orlando Roleplay** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n\n` +
+                  `> The session vote in **ERLCX** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n\n` +
                   `Choose an action below to proceed with the session startup:`
                 );
               const fallbackRow = new ActionRowBuilder().addComponents(
@@ -3935,7 +4916,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
         // Ping all voters in the session channel with Join Server button
         try {
-          const voteChannel = await client.channels.fetch(vote.channelId).catch(() => null);
+          const voteChannel = await interaction.client.channels.fetch(vote.channelId).catch(() => null);
           if (voteChannel) {
             const voterPings = vote.voters.map(id => `<@${id}>`).join(' ');
             const joinCode = CONFIG.SESSION.DEFAULT_JOIN_CODE || 'olrpp';
@@ -3994,7 +4975,7 @@ client.on(Events.InteractionCreate, async interaction => {
         });
 
         try {
-          const voteChannel = await client.channels.fetch(vote.channelId).catch(() => null);
+          const voteChannel = await interaction.client.channels.fetch(vote.channelId).catch(() => null);
           if (voteChannel) {
             await voteChannel.send({
               content: `### Session Postponed\n> <@${vote.hostId}> has postponed the session. Stay tuned for future announcements.`
@@ -4087,7 +5068,7 @@ client.on(Events.InteractionCreate, async interaction => {
             if (interaction.message) {
               await interaction.message.edit(updatedCard).catch(() => null);
             } else {
-              const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
+              const channel = await interaction.client.channels.fetch(giveaway.channelId).catch(() => null);
               if (channel) {
                 const msg = await channel.messages.fetch(giveaway.id).catch(() => null);
                 if (msg) {
@@ -4150,10 +5131,23 @@ client.on(Events.InteractionCreate, async interaction => {
         }
       }
 
-      // Category Buttons from Ticket Panel (General, Management)
+      // Category Buttons from Ticket Panel
       if (interaction.customId.startsWith('ticket_btn_')) {
         const categoryId = interaction.customId.replace('ticket_btn_', '');
-        const category = CONFIG.CATEGORIES.find(c => c.id === categoryId);
+        
+        // Find category from bot instance customizations or fallback to CONFIG.CATEGORIES
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+        const configuredCats = Array.isArray(cust?.ticketCategories) ? cust.ticketCategories : [];
+        const customCat = configuredCats.find(c => c.id === categoryId);
+        const fallbackCat = CONFIG.CATEGORIES.find(c => c.id === categoryId);
+
+        const category = customCat ? {
+          id: customCat.id,
+          label: customCat.name,
+          categoryId: customCat.spawnCategoryId || cust.ticketCategoryId || null,
+          pingRoleId: customCat.pingRoleId || cust.ticketPingRoleId || null
+        } : (fallbackCat || null);
 
         if (!category) {
           return interaction.reply({
@@ -4171,9 +5165,9 @@ client.on(Events.InteractionCreate, async interaction => {
         }
 
         // Check if this category is currently closed by staff
-        if (isCategoryDisabled(categoryId)) {
+        if (isCategoryDisabled(categoryId) || isCategoryDisabled(category.label?.toLowerCase())) {
           return interaction.reply({
-            content: `**${category.label} Support** is currently closed by staff. Please check back later.`,
+            content: `**${category.label}** is currently closed by staff. Please check back later.`,
             ephemeral: true
           });
         }
@@ -4195,10 +5189,11 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
 
-        // Show Modal
+        // Show Modal (Discord modal title max 45 chars)
+        const modalTitle = `${category.label} Support`.slice(0, 45);
         const modal = new ModalBuilder()
           .setCustomId(`modal_open_${categoryId}`)
-          .setTitle(`${category.label} Support`);
+          .setTitle(modalTitle);
 
         const reasonInput = new TextInputBuilder()
           .setCustomId('ticket_reason')
@@ -4369,7 +5364,10 @@ client.on(Events.InteractionCreate, async interaction => {
       // Ignore secondary reply failures
     }
   }
-});
+}
+
+client.on(Events.InteractionCreate, handleInteraction);
+setInteractionHandler(handleInteraction);
 
 /* ========================================================================== */
 /*                      PROCESS & CLIENT ERROR LISTENERS                      */

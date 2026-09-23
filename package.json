@@ -1,5 +1,5 @@
 {
-  "name": "orlando-bot",
+  "name": "erlcxbot",
   "version": "1.0.0",
   "description": "Production-ready Discord Ticket System using discord.js v14 ESM",
   "main": "index.js",

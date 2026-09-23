@@ -174,19 +174,25 @@ export function getRoleDisplayName(role) {
  * Builds the official Application Panel using Discord Components V2 Container
  * featuring the top banner and String Select Menu (strictly no emojis).
  */
-export function buildApplicationPanel() {
+export function buildApplicationPanel(customConfig = null) {
   const bannerPath = path.join(__dirname, 'assets', 'applications_banner.png');
   const files = [];
 
-  let topBannerMediaUrl = CONFIG.APPLICATIONS?.TOP_BANNER_URL || null;
-  if (fs.existsSync(bannerPath)) {
+  let topBannerMediaUrl = customConfig?.appTopBannerUrl || CONFIG.APPLICATIONS?.TOP_BANNER_URL || null;
+  if (!topBannerMediaUrl && fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'applications_banner.png' }));
     topBannerMediaUrl = 'attachment://applications_banner.png';
   }
 
-  const bottomBanner = getBottomBannerAttachment();
-  if (bottomBanner.attachment) {
-    files.push(bottomBanner.attachment);
+  let bottomBannerUrl = null;
+  if (customConfig?.appBottomBannerUrl) {
+    bottomBannerUrl = customConfig.appBottomBannerUrl;
+  } else if (!customConfig || customConfig.appBottomBannerUrl === undefined) {
+    const bottomBanner = getBottomBannerAttachment();
+    if (bottomBanner.attachment) {
+      files.push(bottomBanner.attachment);
+    }
+    bottomBannerUrl = bottomBanner.url;
   }
 
   const isIngameOpen = isPositionOpen('ingame_mod');
@@ -209,20 +215,22 @@ export function buildApplicationPanel() {
   }
 
   // 2. Title and Clean Content (No Emojis)
+  const appTitle = customConfig?.appTitle || 'ERLCX | Staff Application';
+  const appDesc = customConfig?.appDescription ||
+    `> Welcome to the official ERLCX Staff Application portal.\n` +
+    `> Holding a staff position is a privilege that requires consistent activity, professionalism, and accountability. As a staff member, you represent ERLCX at all times.\n\n` +
+    `### Application Requirements\n` +
+    `> • Must be at least 14 years of age.\n` +
+    `> • Discord and Roblox accounts must be at least 30 days old.\n` +
+    `> • Working microphone with willingness to communicate verbally.\n` +
+    `> • Minimum sentence requirements must be met; low effort answers are rejected.\n` +
+    `> • The use of AI is strictly prohibited and results in a permanent blacklist.\n\n` +
+    `### Select Your Position\n` +
+    `> Choose your desired staff position from the dropdown menu below to begin.`;
+
   containerComponents.push({
     type: 10,
-    content:
-      `## Orlando Roleplay | Staff Application\n` +
-      `> Welcome to the official Orlando Roleplay Staff Application portal.\n` +
-      `> Holding a staff position is a privilege that requires consistent activity, professionalism, and accountability. As a staff member, you represent Orlando Roleplay at all times.\n\n` +
-      `### Application Requirements\n` +
-      `> • Must be at least 14 years of age.\n` +
-      `> • Discord and Roblox accounts must be at least 30 days old.\n` +
-      `> • Working microphone with willingness to communicate verbally.\n` +
-      `> • Minimum sentence requirements must be met; low effort answers are rejected.\n` +
-      `> • The use of AI is strictly prohibited and results in a permanent blacklist.\n\n` +
-      `### Select Your Position\n` +
-      `> Choose your desired staff position from the dropdown menu below to begin.`
+    content: `## ${appTitle}\n${appDesc}`
   });
 
   // 3. String Select Menu (NO EMOJIS)
@@ -254,13 +262,13 @@ export function buildApplicationPanel() {
   });
 
   // 4. Bottom Banner
-  if (bottomBanner.url) {
+  if (bottomBannerUrl) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: bottomBanner.url
+            url: bottomBannerUrl
           }
         }
       ]
@@ -331,8 +339,8 @@ export function buildApplicationHubMessage(session) {
   containerComponents.push({
     type: 10,
     content:
-      `## Orlando Roleplay | ${roleName} Application\n` +
-      `> Welcome to the official **Orlando Roleplay Staff Application**.\n` +
+      `## ERLCX | ${roleName} Application\n` +
+      `> Welcome to the official **ERLCX Staff Application**.\n` +
       `> Holding a staff position is a privilege requiring consistent activity and professionalism.\n\n` +
       `### Module Progress\n` +
       `> 1. Rules & Requirements: **${mod1Done ? 'Completed' : 'Ready'}**\n` +
@@ -589,11 +597,11 @@ export function buildModule2Modal(session) {
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
-          .setCustomId('why_orlando')
-          .setLabel('Why Orlando Roleplay? (4 Sentences)') // 35 chars
+          .setCustomId('why_liberty')
+          .setLabel('Why Liberty County / ERLCX? (4 Sentences)') // 42 chars
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Why choose Orlando RP and what sets you apart')
-          .setValue(session.answers?.why_orlando || '')
+          .setPlaceholder('Why choose Liberty County / ERLCX and what sets you apart')
+          .setValue(session.answers?.why_liberty || session.answers?.why_orlando || '')
           .setRequired(true)
       )
     );
@@ -602,9 +610,9 @@ export function buildModule2Modal(session) {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('motivation')
-          .setLabel('Motivation for Orlando Staff (3 Sentences)') // 42 chars
+          .setLabel('Motivation for ERLCX Staff (3 Sentences)') // 40 chars
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Why you want to moderate Orlando Discord')
+          .setPlaceholder('Why you want to moderate ERLCX Discord')
           .setValue(session.answers?.motivation || '')
           .setRequired(true)
       ),
@@ -963,13 +971,13 @@ export function buildStaffReviewCard(submission, page = 0) {
         `> **Previous Moderation History**`,
         ans.previous_history ? ans.previous_history.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
         '',
-        `> **Why Orlando Roleplay Specifically?**`,
-        ans.why_orlando ? ans.why_orlando.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+        `> **Why Liberty County / ERLCX Specifically?**`,
+        (ans.why_liberty || ans.why_orlando) ? (ans.why_liberty || ans.why_orlando).split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
       ].join('\n');
     } else {
       pageContentText = [
         `### Page 2 of 4 • Motivation & Discord History`,
-        `> **Motivation for Orlando Staff**`,
+        `> **Motivation for ERLCX Staff**`,
         ans.motivation ? ans.motivation.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
         '',
         `> **Previous Discord Experience & Bot Knowledge**`,
@@ -1082,7 +1090,7 @@ export function buildStaffReviewCard(submission, page = 0) {
     {
       type: 10,
       content:
-        `## Orlando Roleplay | Staff Application Review\n` +
+        `## ERLCX | Staff Application Review\n` +
         `> Official Staff Evaluation & Confidential Candidate Dossier • **${roleName}**`
     },
     // 3. Candidate Section with Status Pill
@@ -1178,7 +1186,7 @@ export function buildStaffReviewCard(submission, page = 0) {
   // 8. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# Orlando Roleplay Staff Administration • Confidential Dossier #${submission.id.slice(0, 8).toUpperCase()}`
+    content: `-# ERLCX Staff Administration • Confidential Dossier #${submission.id.slice(0, 8).toUpperCase()}`
   });
 
   const bottomBanner = getBottomBannerAttachment();
@@ -1246,10 +1254,10 @@ export function buildApplicationResultV2(submission) {
     {
       type: 10,
       content:
-        `## Orlando Roleplay | Staff Application Result\n` +
+        `## ERLCX | Staff Application Result\n` +
         (isApproved
-          ? `> Please join us in welcoming our newest staff member to the **Orlando Roleplay** team!\n`
-          : `> Thank you to all candidates who applied for the **Orlando Roleplay** staff team.\n`)
+          ? `> Please join us in welcoming our newest staff member to the **ERLCX** team!\n`
+          : `> Thank you to all candidates who applied for the **ERLCX** staff team.\n`)
     },
     // 3. Candidate Section with Status Pill
     {
@@ -1335,7 +1343,7 @@ export function buildApplicationResultV2(submission) {
   // 7. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# Orlando Roleplay Staff Administration • Official Application Result`
+    content: `-# ERLCX Staff Administration • Official Application Result`
   });
 
   const bottomBanner = getBottomBannerAttachment();
@@ -1383,11 +1391,11 @@ export function buildApplicationResultFallback(submission) {
 
   const embed = new EmbedBuilder()
     .setColor(isApproved ? 0x2ecc71 : 0xe74c3c)
-    .setTitle(`Orlando Roleplay | Staff Application Result`)
+    .setTitle(`ERLCX | Staff Application Result`)
     .setDescription(
       (isApproved
-        ? `> Please join us in welcoming our newest staff member to the **Orlando Roleplay** team!\n\n`
-        : `> Thank you to all candidates who applied for the **Orlando Roleplay** staff team.\n\n`) +
+        ? `> Please join us in welcoming our newest staff member to the **ERLCX** team!\n\n`
+        : `> Thank you to all candidates who applied for the **ERLCX** staff team.\n\n`) +
       `**Applicant:** <@${submission.userId}> (\`${submission.userTag || submission.userId}\`)\n` +
       `**Position:** **${roleName}**\n` +
       `**Decision:** **${isApproved ? 'Accepted' : 'Denied'}**\n` +
@@ -1400,7 +1408,7 @@ export function buildApplicationResultFallback(submission) {
         : `> You may reapply during our next staff application cycle.`)
     )
     .setImage('attachment://applications_banner.png')
-    .setFooter({ text: 'Orlando Roleplay Staff Administration' })
+    .setFooter({ text: 'ERLCX Staff Administration' })
     .setTimestamp();
 
   const components = [];
@@ -1458,7 +1466,7 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
     {
       type: 10,
       content:
-        `## Orlando Roleplay | Application Status\n` +
+        `## ERLCX | Application Status\n` +
         (isApproved
           ? `> Congratulations <@${userId}>! Your staff application for **${roleName}** has been **Accepted**.\n\n` +
             `### Application Summary\n` +
@@ -1469,7 +1477,7 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
             (notes ? `> • **Staff Notes:** ${notes}\n\n` : '\n') +
             `### Next Steps & Staff Training\n` +
             `> Please open a ticket in <#1548146597743960146> to claim your in-game & Discord staff roles and schedule your staff orientation & training session.\n\n` +
-            `> *Welcome to the Orlando Roleplay Staff Team.*`
+            `> *Welcome to the ERLCX Staff Team.*`
           : `> Hello <@${userId}>, thank you for taking the time to apply for **${roleName}**.\n` +
             `> After review by Leadership, your staff application has been **Denied** at this time.\n\n` +
             `### Application Summary\n` +
@@ -1487,8 +1495,8 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
         {
           type: 10,
           content: isApproved
-            ? '**Executive Decision**\n-# Verified and accepted by Orlando Roleplay Leadership.'
-            : '**Executive Decision**\n-# Reviewed and closed by Orlando Roleplay Leadership.'
+            ? '**Executive Decision**\n-# Verified and accepted by ERLCX Leadership.'
+            : '**Executive Decision**\n-# Reviewed and closed by ERLCX Leadership.'
         }
       ],
       accessory: {
@@ -1545,7 +1553,7 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
     // 5. Micro Footer
     {
       type: 10,
-      content: `-# Orlando Roleplay Staff Management • Official Status Notification`
+      content: `-# ERLCX Staff Management • Official Status Notification`
     }
   ];
 

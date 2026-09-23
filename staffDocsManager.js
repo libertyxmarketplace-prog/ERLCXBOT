@@ -30,14 +30,25 @@ function getBottomBannerAttachment() {
  * Builds the primary Staff Documentation Panel (Hub) featuring the top banner
  * and an interactive dropdown select menu (strictly zero emojis).
  */
-export function buildStaffDocsHubPayload() {
+export function buildStaffDocsHubPayload(customConfig = null) {
   const files = [];
   const bannerPath = path.join(__dirname, 'assets', 'banner_staff_docs.png');
-  let topBannerUrl = null;
+  let topBannerUrl = customConfig?.staffDocsTopBannerUrl || null;
 
-  if (fs.existsSync(bannerPath)) {
+  if (!topBannerUrl && fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'banner_staff_docs.png' }));
     topBannerUrl = 'attachment://banner_staff_docs.png';
+  }
+
+  let bottomBannerUrl = null;
+  if (customConfig?.staffDocsBottomBannerUrl) {
+    bottomBannerUrl = customConfig.staffDocsBottomBannerUrl;
+  } else if (!customConfig || customConfig.staffDocsBottomBannerUrl === undefined) {
+    const bottomBanner = getBottomBannerAttachment();
+    if (bottomBanner.attachment) {
+      files.push(bottomBanner.attachment);
+    }
+    bottomBannerUrl = bottomBanner.url;
   }
 
   const containerComponents = [];
@@ -58,8 +69,8 @@ export function buildStaffDocsHubPayload() {
   containerComponents.push({
     type: 10,
     content:
-      `## Orlando Roleplay | Staff Documentation\n` +
-      `> Welcome to the official Orlando Roleplay Staff Documentation directory.\n` +
+      `## ERLCX | Staff Documentation\n` +
+      `> Welcome to the official ERLCX Staff Documentation directory.\n` +
       `> Holding a staff position is a privilege that demands impartiality, professionalism, and accountability at all times. As a staff member, your conduct represents the standard of the entire community.\n\n` +
       `### Directory Overview\n` +
       `> • General Staff Regulations & Code of Conduct\n` +
@@ -76,12 +87,12 @@ export function buildStaffDocsHubPayload() {
     components: [
       {
         type: 3,
-        custom_id: 'staff_docs_select',
-        placeholder: 'Select a Staff Document to Review...',
+        custom_id: 'staffdoc_select_category',
+        placeholder: 'Select a Staff Operational Manual...',
         options: [
           {
-            label: 'Staff Regulations & Code of Conduct',
-            value: 'staff_regulations',
+            label: 'General Staff Regulations & Conduct',
+            value: 'general_regulations',
             description: 'Core responsibilities, activity expectations, integrity, and anti-abuse policies.'
           },
           {
@@ -104,18 +115,13 @@ export function buildStaffDocsHubPayload() {
     ]
   });
 
-  const bottomBanner = getBottomBannerAttachment();
-  if (bottomBanner.attachment) {
-    files.push(bottomBanner.attachment);
-  }
-
-  if (bottomBanner.url) {
+  if (bottomBannerUrl) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: bottomBanner.url
+            url: bottomBannerUrl
           }
         }
       ]
@@ -149,7 +155,7 @@ export function buildStaffDocSectionPayload(sectionId) {
 
   if (sectionId === 'staff_regulations') {
     contentText =
-      `## Orlando Roleplay | Staff Regulations & Code of Conduct\n` +
+      `## ERLCX | Staff Regulations & Code of Conduct\n` +
       `> Section I: Core Directives & Professional Expectations\n\n` +
       `### S1. Standard of Professionalism\n` +
       `> Staff members must maintain a calm, objective, and mature demeanor in all interactions. Arguing with community members, engaging in public toxicity, or reacting defensively during administrative disputes will not be tolerated under any circumstances.\n\n` +
@@ -161,10 +167,10 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> In-game commands (including teleportation, vehicle spawning, health overrides, and respawning) may only be utilized strictly for active administrative duty. Utilizing staff privileges to gain in-character advantages during pursuits, shootouts, or criminal scenarios results in immediate termination and server blacklisting.\n\n` +
       `### S5. Confidentiality & Security\n` +
       `> Discussions within staff channels, management directives, internal reviews, and ticket transcripts are strictly confidential. Sharing screenshots or disclosing internal records to regular community members is considered severe misconduct.\n\n` +
-      `-# Orlando Roleplay Staff Administration • Official Regulatory Standard`;
+      `-# ERLCX Staff Administration • Official Regulatory Standard`;
   } else if (sectionId === 'moderation_sop') {
     contentText =
-      `## Orlando Roleplay | In-Game & Moderation SOP\n` +
+      `## ERLCX | In-Game & Moderation SOP\n` +
       `> Section II: Operational Callout & Dispute Resolution Protocol\n\n` +
       `### M1. Mod Call Response Procedure\n` +
       `> 1. Enter moderation mode before responding to any active callout.\n` +
@@ -176,10 +182,10 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> Staff members must claim support tickets promptly. Read the inquiry completely before responding, communicate with formal grammar, and ensure all user questions are answered prior to initiating ticket closure. Do not leave tickets unclaimed for more than five (5) minutes.\n\n` +
       `### M4. In-Game Roleplay Prioritization\n` +
       `> When on the staff team, server moderation takes absolute priority over personal roleplay. If mod calls are pending or server rules are being violated, staff must immediately handle moderation obligations before returning to character play.\n\n` +
-      `-# Orlando Roleplay Staff Administration • Standard Operating Procedure`;
+      `-# ERLCX Staff Administration • Standard Operating Procedure`;
   } else if (sectionId === 'strike_matrix') {
     contentText =
-      `## Orlando Roleplay | Progressive Disciplinary Matrix\n` +
+      `## ERLCX | Progressive Disciplinary Matrix\n` +
       `> Section III: Staff Accountability & Strike Structure\n\n` +
       `### Overview of Progressive Discipline\n` +
       `> Staff members are subject to consistent disciplinary standards. Violations of staff regulations or neglect of duty will result in recorded disciplinary actions posted publicly to #infractions.\n\n` +
@@ -191,13 +197,13 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> • **Level 3 (Second Strike):**\n` +
       `> Issued for serious policy violations, failure to follow management directives, or severe inactivity without LOA. Results in temporary suspension of moderation permissions and final notice.\n\n` +
       `> • **Level 4 (Third Strike / Demotion / Removal):**\n` +
-      `> Reaching three active strikes results in immediate demotion or permanent removal from the Orlando Roleplay staff team.\n\n` +
+      `> Reaching three active strikes results in immediate demotion or permanent removal from the ERLCX staff team.\n\n` +
       `### Strike Expiration Timeline\n` +
       `> Strikes remain active on a staff member's record for forty-five (45) consecutive days from the date of issuance. Following 45 days of clean and active service, the strike is removed from the active count.\n\n` +
-      `-# Orlando Roleplay Staff Administration • Disciplinary Matrix`;
+      `-# ERLCX Staff Administration • Disciplinary Matrix`;
   } else if (sectionId === 'staff_commands') {
     contentText =
-      `## Orlando Roleplay | Administrative Command Directory\n` +
+      `## ERLCX | Administrative Command Directory\n` +
       `> Section IV: In-Game ER:LC & Discord Syntax Guide\n\n` +
       `### In-Game ER:LC Commands\n` +
       `> • \`:to [player]\` — Teleports staff member directly to target player.\n` +
@@ -212,7 +218,7 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> • \`:pm [player] [message]\` — Sends private administrative directive to player.\n\n` +
       `### Usage Guidelines\n` +
       `> Broadcast commands (\`:m\`) must only be utilized for critical server operations such as session starts, priority cooldowns, and server shutdowns.\n\n` +
-      `-# Orlando Roleplay Staff Administration • Command Directory`;
+      `-# ERLCX Staff Administration • Command Directory`;
   }
 
   const v2Payload = {

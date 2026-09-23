@@ -47,15 +47,15 @@ export const DEPARTMENTS = [
 export const ARCHIVED_DEPARTMENTS = [
   {
     id: 'opd',
-    name: 'Orlando Police Department',
+    name: 'Liberty County Police Department',
     file: 'dept_opd.png',
     dmBanner: 'dm_banner_opd.png',
     inviteUrl: 'https://discord.gg/ZH4k9zq3BZ',
-    emoji: '<:OrlandoPoliceDepartment:1551137354477994055>',
-    emojiObj: { id: '1551137354477994055', name: 'OrlandoPoliceDepartment' },
-    jurisdiction: 'City of Orlando & Municipal Patrols',
+    emoji: '<:LibertyCountyPolice:1551137354477994055>',
+    emojiObj: { id: '1551137354477994055', name: 'LibertyCountyPolice' },
+    jurisdiction: 'Liberty County & Municipal Patrols',
     description:
-      'Join the Orlando Police Department and serve your community with integrity, professionalism, and pride. We are seeking dedicated individuals who are committed to public safety, teamwork, and making a positive impact. Start a rewarding career protecting and serving the citizens of Orlando. Apply today!'
+      'Join the Liberty County Police Department and serve your community with integrity, professionalism, and pride. We are seeking dedicated individuals who are committed to public safety, teamwork, and making a positive impact. Start a rewarding career protecting and serving the citizens of Liberty County. Apply today!'
   },
   {
     id: 'ocfr',
@@ -117,7 +117,7 @@ export function buildHeaderPayload() {
     type: 10,
     content:
       `## Departments\n` +
-      `Orlando Roleplay currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      `ERLCX currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
       overviewList
   });
 
@@ -136,7 +136,7 @@ export function buildHeaderPayload() {
     .setColor(0x0a84fd)
     .setTitle('Departments')
     .setDescription(
-      `Orlando Roleplay currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      `ERLCX currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
       overviewList
     );
 
@@ -260,7 +260,7 @@ export function buildDepartmentDmPayload(dept) {
     type: 10,
     content:
       `## ${dept.emoji} ${dept.name}\n` +
-      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent Orlando Roleplay.\n\n` +
+      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent ERLCX.\n\n` +
       `### Quick Department Details\n` +
       `> • **Jurisdiction:** ${dept.jurisdiction}\n` +
       `> • **Status:** Open & Recruiting\n\n` +
@@ -297,7 +297,7 @@ export function buildDepartmentDmPayload(dept) {
     .setTitle(`${dept.name}`)
     .setDescription(
       `### ${dept.emoji} ${dept.name}\n` +
-      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent Orlando Roleplay.\n\n` +
+      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent ERLCX.\n\n` +
       `### Quick Department Details\n` +
       `> • **Jurisdiction:** ${dept.jurisdiction}\n` +
       `> • **Status:** Open & Recruiting\n\n` +

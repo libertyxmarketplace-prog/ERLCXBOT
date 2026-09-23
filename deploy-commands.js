@@ -14,7 +14,7 @@ if (!DISCORD_TOKEN || !CLIENT_ID) {
 const commands = [
   new SlashCommandBuilder()
     .setName('ticket')
-    .setDescription('Orlando Ticket System management commands')
+    .setDescription('ERLCX Ticket System management commands')
     .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages)
     // 1. /ticket panel [channel]
     .addSubcommand(sub =>
@@ -154,7 +154,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('session')
-    .setDescription('Orlando ER:LC Session commands')
+    .setDescription('ERLCX ER:LC Session commands')
     .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages)
     .addSubcommand(sub =>
       sub
@@ -171,7 +171,7 @@ const commands = [
     .addSubcommand(sub =>
       sub
         .setName('vote')
-        .setDescription('Start an official Orlando ER:LC Session Vote')
+        .setDescription('Start an official ERLCX ER:LC Session Vote')
         .addIntegerOption(opt =>
           opt
             .setName('required')
@@ -217,18 +217,6 @@ const commands = [
           opt
             .setName('channel')
             .setDescription('Channel to post the session ended panel into (defaults to #sessions)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false)
-        )
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('info')
-        .setDescription('Post the session ended/info announcement card without buttons into #sessions')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel to post the session info card into (defaults to #sessions)')
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(false)
         )
@@ -336,7 +324,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('application')
-    .setDescription('Orlando Staff Application System')
+    .setDescription('ERLCX Staff Application System')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
@@ -376,7 +364,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('commands')
-    .setDescription('Display the official Orlando Roleplay interactive command directory'),
+    .setDescription('Display the official ERLCX interactive command directory'),
   new SlashCommandBuilder()
     .setName('refont')
     .setDescription('Convert text into custom Mathematical Sans-Serif font (𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍)')
@@ -428,7 +416,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('department')
-    .setDescription('Orlando Departments System')
+    .setDescription('ERLCX Departments System')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
@@ -444,7 +432,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('welcome')
-    .setDescription('Manage or test the Orlando Welcome system')
+    .setDescription('Manage or test the ERLCX Welcome system')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
@@ -475,7 +463,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('staffdocs')
-    .setDescription('Orlando Staff Documentation System')
+    .setDescription('ERLCX Staff Documentation System')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
@@ -605,43 +593,189 @@ const commands = [
             .setDescription('Reason for your leave of absence')
             .setRequired(true)
         )
+    ),
+  new SlashCommandBuilder()
+    .setName('config')
+    .setDescription('Open the interactive bot configuration control panel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addIntegerOption(opt =>
+      opt
+        .setName('page')
+        .setDescription('Page number to open directly (1 to 8)')
+        .setMinValue(1)
+        .setMaxValue(8)
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Specific Bot Identification Number to configure (Admins only)')
+        .setRequired(false)
+    ),
+].map(cmd => cmd.toJSON());
+
+export const adminOnlyCommands = [
+  new SlashCommandBuilder()
+    .setName('retrigger')
+    .setDescription('Retrigger, refresh, or reboot a customer bot instance (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Bot Identification Number to retrigger (e.g. BOT-1049)')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('banbot')
+    .setDescription('Ban and lock a customer bot instance (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Bot Identification Number to ban')
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('reason')
+        .setDescription('Reason for the ban')
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('unbanbot')
+    .setDescription('Unban and restore a customer bot instance (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Bot Identification Number to unban')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('listbots')
+    .setDescription('List all customer bot instances, status, and Bot IDs (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName('createbot')
+    .setDescription('Generate a new bot instance and Bot Identification Number (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(opt =>
+      opt
+        .setName('user')
+        .setDescription('Customer Discord user to assign the bot instance to')
+        .setRequired(false)
     )
 ].map(cmd => cmd.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
+// Feature commands for customer bots (NO banbot, NO createbot, etc.)
+export const customerCommands = commands;
 
-export async function deployCommands() {
+// Full master commands exclusively for ERLCX#2851
+export const masterCommands = [...commands, ...adminOnlyCommands];
+
+// Slim ERLCX-only commands: just /config, /banbot, and /createbot
+export const erlcxMasterCommands = [
+  new SlashCommandBuilder()
+    .setName('config')
+    .setDescription('Open the interactive bot configuration control panel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addIntegerOption(opt =>
+      opt
+        .setName('page')
+        .setDescription('Page number to open directly (1 to 8)')
+        .setMinValue(1)
+        .setMaxValue(8)
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Specific Bot Identification Number to configure (Admins only)')
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('banbot')
+    .setDescription('Ban and lock a customer bot instance (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Bot Identification Number to ban')
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('reason')
+        .setDescription('Reason for the ban')
+        .setRequired(false)
+    ),
+  new SlashCommandBuilder()
+    .setName('createbot')
+    .setDescription('Generate a new bot instance and Bot Identification Number (Owner Only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(opt =>
+      opt
+        .setName('user')
+        .setDescription('Customer Discord user to assign the bot instance to')
+        .setRequired(false)
+    ),
+].map(cmd => cmd.toJSON());
+
+export const configOnlyCommand = [
+  new SlashCommandBuilder()
+    .setName('config')
+    .setDescription('Configure your bot instance, credentials, and settings')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addIntegerOption(opt =>
+      opt
+        .setName('page')
+        .setDescription('Page number to open directly (1 to 8)')
+        .setMinValue(1)
+        .setMaxValue(8)
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt
+        .setName('bot_id')
+        .setDescription('Specific Bot ID to configure (e.g. LC-74921)')
+        .setRequired(false)
+    )
+].map(cmd => cmd.toJSON());
+
+export async function deployCommands(customToken = null, customClientId = null, customGuildId = null, setupOnly = false, isMaster = false) {
+  const token = customToken || process.env.DISCORD_TOKEN;
+  const clientId = customClientId || process.env.CLIENT_ID;
+
+  if (!token || !clientId) {
+    console.error("Missing DISCORD_TOKEN or CLIENT_ID!");
+    return;
+  }
+
+  const restClient = new REST({ version: '10' }).setToken(token);
+  const cmds = setupOnly ? configOnlyCommand : (isMaster ? masterCommands : customerCommands);
+
   try {
-    console.log(`Started refreshing application (/) commands...`);
-
-    // 1. Clear global application commands to eliminate all duplicate command listings
-    console.log(`Clearing global application commands to eliminate duplicate listings...`);
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: [] }
+    // 1. Deploy Global Slash Commands (visible across ALL servers with NO duplicates)
+    console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Client: ${clientId}...`);
+    await restClient.put(
+      Routes.applicationCommands(clientId),
+      { body: cmds }
     );
-    console.log(`Successfully cleared global commands.`);
+    console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands across all servers!`);
 
-    // 2. Register directly to guilds for instant updates without caching delays
-    const targetGuilds = ['1530147023754367006', '1541210827967823955'];
-    if (GUILD_ID && GUILD_ID.trim() !== '' && !targetGuilds.includes(GUILD_ID)) {
-      targetGuilds.push(GUILD_ID);
-    }
-
-    for (const gId of targetGuilds) {
+    // 2. Clear any lingering guild-scoped commands to prevent duplicate commands in Discord's menu
+    const guildToClean = customGuildId || process.env.GUILD_ID;
+    if (guildToClean && guildToClean.trim() !== '') {
       try {
-        console.log(`Registering guild commands to Guild: ${gId}`);
-        await rest.put(
-          Routes.applicationGuildCommands(CLIENT_ID, gId),
-          { body: commands }
+        await restClient.put(
+          Routes.applicationGuildCommands(clientId, guildToClean),
+          { body: [] }
         );
-        console.log(`Successfully registered guild slash commands to Guild ${gId}.`);
-      } catch (gErr) {
-        console.warn(`Could not register commands to guild ${gId}:`, gErr.message);
-      }
+        console.log(`[DEPLOY] Cleared legacy guild-scoped commands for Guild: ${guildToClean} to prevent duplicates.`);
+      } catch {}
     }
   } catch (error) {
-    console.error('Error deploying slash commands:', error);
+    console.error('[DEPLOY] Error deploying slash commands:', error);
   }
 }
 

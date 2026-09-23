@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- *                    ORLANDO SUPPORT - CONFIGURATION SETTINGS
+ *                    ERLCX - CONFIGURATION SETTINGS
  * ============================================================================
  */
 
@@ -21,7 +21,7 @@ export const CONFIG = {
   STAFF_ROLE_IDS: [],
 
   // Panel text content matching exact reference screenshot (no bullet dot)
-  PANEL_TITLE: "Orlando Support",
+  PANEL_TITLE: "ERLCX Support",
   PANEL_DESCRIPTION:
     "> If you require support, we ask you to **open a ticket and our team will be ready to help**. Choose the category that matches your issue below and a private channel will be opened for you. Any trolling or rule violations will result in instant moderation towards your account.",
 
@@ -45,7 +45,7 @@ export const CONFIG = {
 
   // Rules text redesigned with blockquotes and clean headers
   RULES_CONTENT: {
-    title: "ORLANDO ROLEPLAY | TICKET CENTER",
+    title: "ERLCX | TICKET CENTER",
     description: 
       "> Need help, want to report an issue, or have a question for our team? Select the ticket option that best matches your situation.\n" +
       "> Before opening a ticket, please read the information below carefully.\n\n" +
@@ -66,7 +66,7 @@ export const CONFIG = {
       "> • Ticket decisions and punishments may vary based on the severity of the situation.\n" +
       "> • Please do not open multiple tickets for the same issue unless instructed by staff.\n" +
       "> • Ticket transcripts may be archived through our ticket system.\n\n" +
-      "### ORLANDO ROLEPLAY\n" +
+      "### ERLCX\n" +
       "> Ensure your ticket has a valid reason and provide all necessary details. Rule violations lead to moderation."
   },
 
@@ -77,13 +77,13 @@ export const CONFIG = {
     TOP_BANNER_URL: "https://media.discordapp.net/attachments/1549619044443881562/1550251964934266980/700C2C5F-87DF-4040-9B5D-199F13E4FFFB.png?ex=6aada826&is=6aac56a6&hm=8106843f406d2c1b4b0956a60fcbf65d93b336981d1867ffcccdf60456fdf908&=&format=webp&quality=lossless&width=2048&height=684",
     BOTTOM_BANNER_URL: "https://media.discordapp.net/attachments/1550286332918501436/1550287860970684556/New_Project_-_2026-09-13T211015.958.png?ex=6aadc995&is=6aac7815&hm=a3a555030d639e62bfdcd1dafd55c6583dc5bd06d4295f0185ee739bf5d761d4&=&format=webp&quality=lossless",
     NOTIFICATION_ROLE_ID: "1548112626389618718",
-    DEFAULT_JOIN_CODE: "olrpp",
+    DEFAULT_JOIN_CODE: "liberty",
     DESCRIPTION:
-      "> Orlando Roleplay runs live, staff-supervised operations. Hop into the private server for structured patrols, realistic calls, and a respectful community atmosphere.",
+      "> ERLCX runs live, staff-supervised operations across Liberty County. Hop into the private server for structured patrols, realistic calls, and a respectful community atmosphere.",
     CHANNEL_ID: "1548147260297322496",
     INGAME_VC_ID: "1550318371340550254",
     QUEUE_VC_ID: "1550318480136470638",
-    VOTE_TOP_BANNER_URL: "https://cdn.discordapp.com/attachments/1548876816171798678/1550301406764990494/orlando_session_vote.png?ex=6aadd632&is=6aac84b2&hm=e1a6ed0bdc0c1d8095d39fda70caaaa8fca3349f0a32c6c4d16208e93f79e41b&",
+    VOTE_TOP_BANNER_URL: "https://media.discordapp.net/attachments/1549619044443881562/1550251964934266980/700C2C5F-87DF-4040-9B5D-199F13E4FFFB.png?ex=6aada826&is=6aac56a6&hm=8106843f406d2c1b4b0956a60fcbf65d93b336981d1867ffcccdf60456fdf908&=&format=webp&quality=lossless&width=2048&height=684",
     VOTE_BOTTOM_BANNER_URL: "https://media.discordapp.net/attachments/1528834540599251100/1548863471956005004/New_Project_-_2026-09-13T211015.958.png?ex=6aad3844&is=6aabe6c4&hm=2ba54eef28ee39f1b13e9fa0fee9dc4115ef281d2e8b0cb0a795256129658c52&=&format=webp&quality=lossless"
   },
 
@@ -106,13 +106,13 @@ export const CONFIG = {
     WELCOME_EMOJI: "<:welcome:1548529700731752478>",
     PEOPLE_EMOJI_ID: "1547025501703372820",
     PEOPLE_EMOJI_NAME: "People",
-    SERVER_NAME: "Orlando Roleplay"
+    SERVER_NAME: "ERLCX"
   },
 
   // Departments System Configuration
   DEPARTMENTS: {
     ARROW_EMOJI: "<:Right_arrow:1550446417376448593>",
     TOP_BANNER_PATH: "./assets/department_banner.png",
-    SERVER_NAME: "Orlando Roleplay"
+    SERVER_NAME: "ERLCX"
   }
 };

@@ -30,12 +30,12 @@ function getBottomBannerAttachment() {
 /**
  * Builds the Promotion Announcement card matching the Application Results V2 styling.
  */
-export function buildPromotionCard({ user, newRank, oldRank = null, reason = null, promotedBy, role = null }) {
+export function buildPromotionCard({ user, newRank, oldRank = null, reason = null, promotedBy, role = null, bannerUrl = null }) {
   const files = [];
   const bannerPath = path.join(__dirname, 'assets', 'banner_promotion.png');
-  let topBannerUrl = null;
+  let topBannerUrl = bannerUrl || null;
 
-  if (fs.existsSync(bannerPath)) {
+  if (!topBannerUrl && fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'banner_promotion.png' }));
     topBannerUrl = 'attachment://banner_promotion.png';
   }
@@ -74,7 +74,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
   containerComponents.push({
     type: 10,
     content:
-      `## Orlando Roleplay | Staff Promotion\n` +
+      `## ERLCX | Staff Promotion\n` +
       `> Please join us in congratulating our staff member on their official rank promotion!\n` +
       `> Staff Member: <@${user.id}> (\`${user.tag || user.username}\`)`
   });
@@ -85,7 +85,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
     components: [
       {
         type: 10,
-        content: `**New Position / Rank**\n-# Official rank advancement within Orlando Roleplay.`
+        content: `**New Position / Rank**\n-# Official rank advancement within ERLCX.`
       }
     ],
     accessory: {
@@ -106,7 +106,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
     `> • **Date:** <t:${Math.floor(Date.now() / 1000)}:f>`,
     ...(reason ? [`> • **Reason / Merits:** ${reason}`] : []),
     `\n### Management Notice`,
-    `> Thank you for your continued dedication, active service, and professional conduct. Keep up the exceptional work representing Orlando Roleplay!`
+    `> Thank you for your continued dedication, active service, and professional conduct. Keep up the exceptional work representing ERLCX!`
   ];
 
   containerComponents.push({
@@ -138,7 +138,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
   // 6. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# Orlando Roleplay Staff Administration • Official Promotion Notification`
+    content: `-# ERLCX Staff Administration • Official Promotion Notification`
   });
 
   const bottomBanner = getBottomBannerAttachment();
@@ -174,12 +174,12 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
 /**
  * Builds the Infraction Announcement card matching the Application Results V2 styling.
  */
-export function buildInfractionCard({ user, type, reason, proof = null, issuedBy }) {
+export function buildInfractionCard({ user, type, reason, proof = null, issuedBy, bannerUrl = null }) {
   const files = [];
   const bannerPath = path.join(__dirname, 'assets', 'banner_infraction.png');
-  let topBannerUrl = null;
+  let topBannerUrl = bannerUrl || null;
 
-  if (fs.existsSync(bannerPath)) {
+  if (!topBannerUrl && fs.existsSync(bannerPath)) {
     files.push(new AttachmentBuilder(bannerPath, { name: 'banner_infraction.png' }));
     topBannerUrl = 'attachment://banner_infraction.png';
   }
@@ -204,7 +204,7 @@ export function buildInfractionCard({ user, type, reason, proof = null, issuedBy
   containerComponents.push({
     type: 10,
     content:
-      `## Orlando Roleplay | Staff Infraction Notice\n` +
+      `## ERLCX | Staff Infraction Notice\n` +
       `> An official disciplinary action has been issued by Staff Management.\n` +
       `> Staff Member: <@${user.id}> (\`${user.tag || user.username}\`)`
   });
@@ -262,7 +262,7 @@ export function buildInfractionCard({ user, type, reason, proof = null, issuedBy
   // 6. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# Orlando Roleplay Staff Management • Official Disciplinary Documentation`
+    content: `-# ERLCX Staff Management • Official Disciplinary Documentation`
   });
 
   const bottomBanner = getBottomBannerAttachment();

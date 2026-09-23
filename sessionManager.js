@@ -93,9 +93,11 @@ async function fetchRobloxOwnerName(ownerId) {
 
 /**
  * Fetches real-time server information from ER:LC API.
+ * @param {string} [apiKey] - Per-bot ER:LC API key. Falls back to CONFIG.SESSION.API_KEY.
  */
-export async function fetchErlcServerData() {
-  const { API_KEY, API_BASE } = CONFIG.SESSION;
+export async function fetchErlcServerData(apiKey) {
+  const API_KEY = apiKey || CONFIG.SESSION.API_KEY;
+  const API_BASE = CONFIG.SESSION.API_BASE;
 
   try {
     const headers = { 'Server-Key': API_KEY };
@@ -113,9 +115,9 @@ export async function fetchErlcServerData() {
     if (!serverData || serverData.code || serverData.message) {
       return {
         online: false,
-        name: 'Orlando Roleplay',
-        ownerName: 'Orlando Management',
-        joinCode: CONFIG.SESSION.DEFAULT_JOIN_CODE,
+        name: 'Server',
+        ownerName: 'Management',
+        joinCode: '',
         currentPlayers: 0,
         maxPlayers: 50,
         queue: 0,
@@ -138,9 +140,9 @@ export async function fetchErlcServerData() {
 
     return {
       online: currentPlayers > 0,
-      name: serverData.Name || 'Orlando Roleplay',
-      ownerName: ownerName || 'shots',
-      joinCode: serverData.JoinKey || CONFIG.SESSION.DEFAULT_JOIN_CODE,
+      name: serverData.Name || 'Server',
+      ownerName: ownerName || 'Staff',
+      joinCode: serverData.JoinKey || '',
       currentPlayers: currentPlayers,
       maxPlayers: serverData.MaxPlayers || 50,
       queue: queueList.length,
@@ -150,9 +152,9 @@ export async function fetchErlcServerData() {
     console.error('Failed to fetch ER:LC server data:', err);
     return {
       online: false,
-      name: 'Orlando Roleplay',
-      ownerName: 'Orlando Management',
-      joinCode: CONFIG.SESSION.DEFAULT_JOIN_CODE,
+      name: 'Server',
+      ownerName: 'Management',
+      joinCode: '',
       currentPlayers: 0,
       maxPlayers: 50,
       queue: 0,
@@ -162,10 +164,23 @@ export async function fetchErlcServerData() {
 }
 
 /**
+ * Convenience wrapper — fetches using a bot instance's own ER:LC API key.
+ * @param {object} bot - Bot instance from botManager.
+ */
+export async function fetchErlcServerDataForBot(bot) {
+  return fetchErlcServerData(bot?.erlcApiKey || '');
+}
+
+/**
  * Builds the modern Discord Components V2 Session Information Panel
  * exactly matching the provided visual reference.
  */
-export function buildSessionPanel(sessionData) {
+/**
+ * Builds the session panel. Accepts optional customizations to use per-bot banners & server name.
+ * @param {object} sessionData
+ * @param {object} [customizations] - Bot customizations (banner URLs, serverName, etc.)
+ */
+export function buildSessionPanel(sessionData, customizations = {}) {
   const {
     online,
     name,
@@ -177,24 +192,23 @@ export function buildSessionPanel(sessionData) {
     staffCount
   } = sessionData;
 
-  const joinUrl = `https://policeroleplay.community/join?code=${encodeURIComponent(joinCode || 'olrpp')}`;
+  const joinUrl = joinCode
+    ? `https://policeroleplay.community/join?code=${encodeURIComponent(joinCode)}`
+    : null;
+
+  const sessionTopBanner = customizations.sessionTopBannerUrl || CONFIG.SESSION.TOP_BANNER_URL || '';
+  const communityName = customizations.serverName || name || 'Live Session';
 
   const containerComponents = [
-    // 1. Top Banner (Sessions Header)
-    {
+    // 1. Top Banner (Sessions Header) — only if a URL is set
+    ...(sessionTopBanner ? [{
       type: 12,
-      items: [
-        {
-          media: {
-            url: CONFIG.SESSION.TOP_BANNER_URL
-          }
-        }
-      ]
-    },
+      items: [{ media: { url: sessionTopBanner } }]
+    }] : []),
     // 2. Title & Description Blockquote
     {
       type: 10,
-      content: `### Session Information\n> Orlando Roleplay live operations & staff patrols.`
+      content: `### Session Information\n> **${communityName}** live operations & staff patrols.`
     },
     // 3. Row: Server Name
     {
@@ -314,12 +328,12 @@ export function buildSessionPanel(sessionData) {
           label: 'Session Notification',
           custom_id: 'session_btn_notify'
         },
-        {
+        ...(joinUrl ? [{
           type: 2,
           style: 5, // Link
           label: 'Join Server ↗',
           url: joinUrl
-        },
+        }] : []),
         {
           type: 2,
           style: online ? 3 : 4, // 3 = Success (Green), 4 = Danger (Red)
@@ -331,21 +345,23 @@ export function buildSessionPanel(sessionData) {
     }
   ];
 
-  const bannerInfo = getBottomBannerPayload();
-  const files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
-
-  // 10. Bottom Banner Image
-  if (bannerInfo.url) {
+  // 10. Bottom Banner (custom per-bot URL preferred, then local file fallback)
+  const sessionBottomBanner = customizations.sessionBottomBannerUrl || '';
+  let files = [];
+  if (sessionBottomBanner) {
     containerComponents.push({
       type: 12,
-      items: [
-        {
-          media: {
-            url: bannerInfo.url
-          }
-        }
-      ]
+      items: [{ media: { url: sessionBottomBanner } }]
     });
+  } else {
+    const bannerInfo = getBottomBannerPayload();
+    files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
+    if (bannerInfo.url) {
+      containerComponents.push({
+        type: 12,
+        items: [{ media: { url: bannerInfo.url } }]
+      });
+    }
   }
 
   // 11. Footer with relative timestamp
@@ -373,13 +389,17 @@ const VC_RENAME_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Updates in-game and queue stats voice channels based on ER:LC API data.
+ * @param {import('discord.js').Client} client
+ * @param {object} sessionData
+ * @param {object} [customizations] - Bot customizations containing VC IDs.
  */
-export async function updateVoiceChannelStats(client, sessionData) {
+export async function updateVoiceChannelStats(client, sessionData, customizations = {}) {
   if (!client || !sessionData) return;
   const now = Date.now();
 
-  const ingameVcId = CONFIG.SESSION?.INGAME_VC_ID || '1550318371340550254';
-  const queueVcId = CONFIG.SESSION?.QUEUE_VC_ID || '1550318480136470638';
+  const ingameVcId = customizations.ingameVcId || CONFIG.SESSION?.INGAME_VC_ID || '';
+  const queueVcId = customizations.queueVcId || CONFIG.SESSION?.QUEUE_VC_ID || '';
+  if (!ingameVcId && !queueVcId) return; // No VCs configured — skip
 
   // 1. In-game voice channel: `ingame X/Y`
   const targetIngameName = `ingame ${sessionData.currentPlayers}/${sessionData.maxPlayers}`;
@@ -415,17 +435,21 @@ export async function updateVoiceChannelStats(client, sessionData) {
 /**
  * Updates all live session panels with fresh data from ER:LC API,
  * as well as the dynamic voice channel stats.
+ * @param {import('discord.js').Client} client
+ * @param {object} [bot] - Optional bot instance (for per-bot API key & customizations).
  */
-export async function updateAllSessionPanels(client) {
-  const sessionData = await fetchErlcServerData();
+export async function updateAllSessionPanels(client, bot = null) {
+  const apiKey = bot?.erlcApiKey || '';
+  const customizations = bot?.customizations || {};
+  const sessionData = await fetchErlcServerData(apiKey);
 
-  // Always update dynamic voice channel stats
-  await updateVoiceChannelStats(client, sessionData);
+  // Always update dynamic voice channel stats (uses per-bot VC IDs if configured)
+  await updateVoiceChannelStats(client, sessionData, customizations);
 
   const panelStore = loadSessionPanels();
   if (!panelStore.panels || panelStore.panels.length === 0) return;
 
-  const sessionPayload = buildSessionPanel(sessionData);
+  const sessionPayload = buildSessionPanel(sessionData, customizations);
 
   const validPanels = [];
   for (const panel of panelStore.panels) {
@@ -489,7 +513,7 @@ export function buildSessionVotePayload(vote) {
     // 2. Title & Professional Description (No emojis, no bullet dots)
     {
       type: 10,
-      content: `### Orlando Roleplay — Session Vote\n> Cast your vote below to begin today's session.`
+      content: `### ERLCX — Session Vote\n> Cast your vote below to begin today's session.`
     },
     // 3. Row: Session Votes (Pill on the far right)
     {
@@ -632,27 +656,23 @@ export function saveSessionState(state) {
  * Builds the Discord Components V2 Session Ended / Server Closed Panel
  * matching the user reference image.
  */
-export function buildSessionEndedPanel(sessionData = null) {
+export function buildSessionEndedPanel(sessionData = null, customizations = {}) {
   const currentPlayers = sessionData?.currentPlayers ?? 0;
   const maxPlayers = sessionData?.maxPlayers ?? 50;
+  const sessionTopBanner = customizations.sessionShutdownBannerUrl || customizations.sessionTopBannerUrl || CONFIG.SESSION.TOP_BANNER_URL || '';
+  const communityName = customizations.serverName || 'Session';
 
   const containerComponents = [
-    // 1. Top Banner Image
-    {
+    // 1. Top Banner Image — use shutdown banner if configured, else session top banner
+    ...(sessionTopBanner ? [{
       type: 12,
-      items: [
-        {
-          media: {
-            url: CONFIG.SESSION.TOP_BANNER_URL
-          }
-        }
-      ]
-    },
+      items: [{ media: { url: sessionTopBanner } }]
+    }] : []),
     // 2. Session Ended Announcement Text
     {
       type: 10,
       content: [
-        'A **Orlando Roleplay** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today\'s **roleplay enjoyable**!\n',
+        `A **${communityName}** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today's **roleplay enjoyable**!\n`,
         'The **server** is now **closed**. We hope you **enjoyed the session**, stay tuned for the next session **startup**!'
       ].join('\n')
     },
@@ -705,8 +725,7 @@ export function buildSessionEndedPanel(sessionData = null) {
     flags: 32768, // IS_COMPONENTS_V2
     components: [
       {
-        type: 17, // Container
-        accent_color: 689405, // Modern blue (#0a84fd)
+        type: 17, // Container without accent_color (clean neutral border)
         components: containerComponents
       }
     ],
@@ -715,8 +734,8 @@ export function buildSessionEndedPanel(sessionData = null) {
 }
 
 /**
- * Builds the Orlando Session Info announcement card matching the user's reference image:
- * Top banner, Orlando session ended text, and bottom banner — without any buttons.
+ * Builds the ERLCX Session Info announcement card matching the user's reference image:
+ * Top banner, ERLCX session ended text, and bottom banner — without any buttons.
  */
 export function buildSessionInfoCard() {
   const bannerInfo = getBottomBannerPayload();
@@ -738,7 +757,7 @@ export function buildSessionInfoCard() {
     {
       type: 10,
       content: [
-        'A **Orlando Roleplay** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today\'s **roleplay enjoyable**!\n',
+        'An **ERLCX** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today\'s **roleplay enjoyable**!\n',
         'The **server** is now **closed**. We hope you **enjoyed the session**, stay tuned for the next session **startup**!'
       ].join('\n')
     }
@@ -762,8 +781,7 @@ export function buildSessionInfoCard() {
     flags: 32768, // IS_COMPONENTS_V2
     components: [
       {
-        type: 17, // Container
-        accent_color: 689405, // Modern blue (#0a84fd)
+        type: 17, // Container without accent_color (clean neutral border)
         components: containerComponents
       }
     ],
@@ -775,8 +793,8 @@ export function buildSessionInfoCard() {
  * Ensures the session channel displays the Session Ended / Offline panel
  * whenever there are no active live session panels.
  */
-export async function ensureSessionOfflineState(client) {
-  const channelId = CONFIG.SESSION.CHANNEL_ID;
+export async function ensureSessionOfflineState(client, bot = null) {
+  const channelId = bot?.customizations?.sessionChannelId || CONFIG.SESSION.CHANNEL_ID;
   if (!channelId) return;
 
   const panelsData = loadSessionPanels();
@@ -787,8 +805,8 @@ export async function ensureSessionOfflineState(client) {
   if (!channel) return;
 
   const state = loadSessionState();
-  const sessionData = await fetchErlcServerData();
-  const endedPayload = buildSessionEndedPanel(sessionData);
+  const sessionData = await fetchErlcServerData(bot?.erlcApiKey || '');
+  const endedPayload = buildSessionEndedPanel(sessionData, bot?.customizations);
 
   if (state.offlineMessageId) {
     const existingMsg = await channel.messages.fetch(state.offlineMessageId).catch(() => null);
@@ -812,8 +830,8 @@ export async function ensureSessionOfflineState(client) {
  * Deletes any active live session panels, posts the Session Ended panel,
  * and updates persistent state.
  */
-export async function shutdownSession(client, targetChannelId = null) {
-  const channelId = targetChannelId || CONFIG.SESSION.CHANNEL_ID;
+export async function shutdownSession(client, targetChannelId = null, bot = null) {
+  const channelId = targetChannelId || bot?.customizations?.sessionChannelId || CONFIG.SESSION.CHANNEL_ID;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) throw new Error(`Could not find channel with ID ${channelId}`);
 
@@ -843,8 +861,8 @@ export async function shutdownSession(client, targetChannelId = null) {
   }
 
   // 3. Fetch latest server player count & post Session Ended panel
-  const sessionData = await fetchErlcServerData();
-  const endedPayload = buildSessionEndedPanel(sessionData);
+  const sessionData = await fetchErlcServerData(bot?.erlcApiKey || '');
+  const endedPayload = buildSessionEndedPanel(sessionData, bot?.customizations);
   const sentMsg = await channel.send(endedPayload);
 
   state.offlineMessageId = sentMsg.id;
@@ -857,8 +875,8 @@ export async function shutdownSession(client, targetChannelId = null) {
  * Posts the Live Session Information panel in the channel,
  * deleting the offline/ended panel if it exists.
  */
-export async function activateLiveSessionPanel(client, targetChannelId = null) {
-  const channelId = targetChannelId || CONFIG.SESSION.CHANNEL_ID;
+export async function activateLiveSessionPanel(client, targetChannelId = null, bot = null) {
+  const channelId = targetChannelId || bot?.customizations?.sessionChannelId || CONFIG.SESSION.CHANNEL_ID;
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel) throw new Error(`Could not find channel with ID ${channelId}`);
 
@@ -873,9 +891,9 @@ export async function activateLiveSessionPanel(client, targetChannelId = null) {
     saveSessionState(state);
   }
 
-  // 2. Fetch latest data and post live panel
-  const sessionData = await fetchErlcServerData();
-  const sessionPayload = buildSessionPanel(sessionData);
+  // 2. Fetch latest data and post live panel using bot's own API key & customizations
+  const sessionData = await fetchErlcServerData(bot?.erlcApiKey || '');
+  const sessionPayload = buildSessionPanel(sessionData, bot?.customizations || {});
   const sentMsg = await channel.send(sessionPayload);
 
   addSessionPanel(channel.id, sentMsg.id);
@@ -905,7 +923,7 @@ export function buildHostVoteCompletedPayload(vote) {
       type: 10,
       content: [
         '### Session Vote Completed — Action Required',
-        `> The session vote in **Orlando Roleplay** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n`,
+        `> The session vote in **ERLCX** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n`,
         'Choose an action below to proceed with the session startup:'
       ].join('\n')
     },
@@ -947,8 +965,7 @@ export function buildHostVoteCompletedPayload(vote) {
     flags: 32768, // IS_COMPONENTS_V2
     components: [
       {
-        type: 17, // Container
-        accent_color: 689405, // Modern blue (#0a84fd)
+        type: 17, // Container without accent_color (clean neutral border)
         components: containerComponents
       }
     ]

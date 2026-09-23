@@ -28,7 +28,7 @@ const targetPath = path.join(binDir, filename);
 
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'OrlandoBot/1.0' } }, res => {
+    https.get(url, { headers: { 'User-Agent': 'ERLCXBot/1.0' } }, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return downloadFile(res.headers.location, dest).then(resolve).catch(reject);
       }

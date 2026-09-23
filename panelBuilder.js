@@ -17,75 +17,93 @@ import { loadDeskData, isReportStaffDisabled } from './storage.js';
  * - ActionRow (type 1) with General and Management buttons
  * - Bottom blue accent strip (type 12)
  */
-export function buildTicketPanel(deskData = null) {
+export function buildTicketPanel(deskData = null, customConfig = null) {
   const desk = deskData || loadDeskData();
   const disabledList = Array.isArray(desk?.disabledCategories) ? desk.disabledCategories : [];
   const isGeneralDisabled = disabledList.includes('general');
   const isManagementDisabled = disabledList.includes('management');
 
-  const containerComponents = [
-    // 1. Top Banner Image inside container
-    {
-      type: 12,
-      items: [
-        {
-          media: {
-            url: CONFIG.TOP_BANNER_URL
-          }
-        }
-      ]
-    },
-    // 2. Title and Description inside container (no bullet dot)
-    {
-      type: 10,
-      content: `## ${CONFIG.PANEL_TITLE}\n${CONFIG.PANEL_DESCRIPTION}`
-    },
-    // 3. Section with Blue Rules Button touching the far right wall
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: '**Please review ticket guidelines before opening.**'
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 1, // Primary (Blue!)
-        label: 'Rules',
-        custom_id: 'ticket_btn_rules'
-      }
-    },
-    // 4. Action Row with General & Management category buttons
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 2, // Secondary (Gray)
-          label: isGeneralDisabled ? 'General (Closed)' : 'General',
-          custom_id: 'ticket_btn_general',
-          disabled: isGeneralDisabled
-        },
-        {
-          type: 2,
-          style: 2, // Secondary (Gray)
-          label: isManagementDisabled ? 'Management (Closed)' : 'Management',
-          custom_id: 'ticket_btn_management',
-          disabled: isManagementDisabled
-        }
-      ]
-    }
-  ];
+  const topBanner = customConfig?.topBannerUrl || CONFIG.TOP_BANNER_URL;
+  const bottomBanner = customConfig?.bottomBannerUrl || CONFIG.BOTTOM_BANNER_URL;
+  const panelTitle = customConfig?.panelTitle || CONFIG.PANEL_TITLE;
+  const panelDesc = customConfig?.panelDescription || CONFIG.PANEL_DESCRIPTION;
 
-  // 5. Bottom blue accent strip inside container
-  if (CONFIG.BOTTOM_BANNER_URL) {
+  const containerComponents = [];
+
+  // 1. Top Banner Image inside container (only if set)
+  if (topBanner && topBanner.trim() !== '') {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.BOTTOM_BANNER_URL
+            url: topBanner
+          }
+        }
+      ]
+    });
+  }
+
+  // 2. Title and Description inside container
+  containerComponents.push({
+    type: 10,
+    content: `## ${panelTitle}\n${panelDesc}`
+  });
+
+  // 3. Section with Blue Rules Button touching the far right wall
+  containerComponents.push({
+    type: 9,
+    components: [
+      {
+        type: 10,
+        content: '**Please review ticket guidelines before opening.**'
+      }
+    ],
+    accessory: {
+      type: 2,
+      style: 1, // Primary (Blue!)
+      label: 'Rules',
+      custom_id: 'ticket_btn_rules'
+    }
+  });
+
+  // 4. Action Row with dynamic category buttons (no emojis)
+  const defaultCats = [
+    { id: 'cat_1', name: 'General Support' },
+    { id: 'cat_2', name: 'High Rank' }
+  ];
+  const configuredCats = Array.isArray(customConfig?.ticketCategories) && customConfig.ticketCategories.length > 0
+    ? customConfig.ticketCategories.filter(c => c && c.name && c.name.trim() !== '')
+    : defaultCats;
+
+  const categoryButtons = configuredCats.slice(0, 5).map((cat, idx) => {
+    const catId = cat.id || `cat_${idx + 1}`;
+    const cleanLabel = (cat.name || `Support ${idx + 1}`).trim();
+    const isClosed = disabledList.includes(catId) || disabledList.includes(cleanLabel.toLowerCase());
+    return {
+      type: 2,
+      style: 2, // Secondary (Gray)
+      label: isClosed ? `${cleanLabel} (Closed)` : cleanLabel,
+      custom_id: `ticket_btn_${catId}`,
+      disabled: isClosed
+    };
+  });
+
+  if (categoryButtons.length > 0) {
+    containerComponents.push({
+      type: 1,
+      components: categoryButtons
+    });
+  }
+
+  // 5. Bottom blue accent strip inside container
+  if (bottomBanner) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: bottomBanner
           }
         }
       ]
@@ -106,18 +124,21 @@ export function buildTicketPanel(deskData = null) {
 /**
  * Builds the rich rules embed displayed when a user clicks the blue Rules button.
  */
-export function buildRulesEmbed() {
+export function buildRulesEmbed(customConfig = null) {
+  const title = customConfig?.rulesTitle || CONFIG.RULES_CONTENT.title;
+  const description = customConfig?.rulesDescription || CONFIG.RULES_CONTENT.description;
+
   const embed = new EmbedBuilder()
-    .setTitle(CONFIG.RULES_CONTENT.title)
-    .setDescription(CONFIG.RULES_CONTENT.description)
+    .setTitle(title)
+    .setDescription(description)
     .setFooter({
-      text: "Orlando Roleplay • Rules verified. You may now select a category."
+      text: "Rules verified. You may now select a category."
     })
     .setTimestamp();
 
   return {
     embeds: [embed],
-    ephemeral: true
+    flags: 64
   };
 }
 
@@ -149,8 +170,8 @@ export function buildTrainingTicketControl(ticketData) {
     {
       type: 10,
       content:
-        `## Orlando Support | Staff Training & Onboarding\n` +
-        `> Welcome <@${ticketData.authorId}> to the **Orlando Roleplay** staff team!\n` +
+        `## ERLCX Support | Staff Training & Onboarding\n` +
+        `> Welcome <@${ticketData.authorId}> to the **ERLCX** staff team!\n` +
         `> This private onboarding channel has been prepared for your staff orientation and in-game training.`
     },
     // 3. Section with Green Accepted Status Pill
@@ -250,7 +271,7 @@ export function buildTrainingTicketControl(ticketData) {
 /**
  * Builds the ticket control panel using Discord Components V2 Container (type 17):
  * - Banner at top (type 12)
- * - Title without emdashes (Orlando Support | Category)
+ * - Title without emdashes (ERLCX Support | Category)
  * - Claim and Close buttons INSIDE the container
  */
 export function buildTicketControl(ticketData) {
@@ -281,7 +302,7 @@ export function buildTicketControl(ticketData) {
     {
       type: 10,
       content: 
-        `## Orlando Support | ${categoryName}\n` +
+        `## ERLCX Support | ${categoryName}\n` +
         `> Welcome <@${ticketData.authorId}>. Our support team has been notified.\n` +
         `> Please provide all relevant details regarding your inquiry while a staff member responds.\n\n` +
         `**Opened By:** <@${ticketData.authorId}> (${ticketData.authorTag})\n` +
@@ -433,7 +454,7 @@ export function buildTranscriptLogEmbed({
       }
     )
     .setFooter({
-      text: `Orlando Support Desk • ID: ${channelId}`
+      text: `ERLCX Support Desk • ID: ${channelId}`
     })
     .setTimestamp();
 
@@ -472,7 +493,7 @@ export function buildTranscriptLogEmbed({
 export function buildWelcomePayload(member) {
   const guild = member.guild;
   const memberCount = guild?.memberCount || 1;
-  const serverName = guild?.name || CONFIG.WELCOME.SERVER_NAME || 'Orlando Roleplay';
+  const serverName = guild?.name || CONFIG.WELCOME.SERVER_NAME || 'ERLCX';
 
   // Determine navigate channel ID
   let navChannelId = CONFIG.WELCOME.NAVIGATE_CHANNEL_ID;
@@ -702,14 +723,14 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
 
   const embed = new EmbedBuilder()
     .setColor(0x2B6CB0)
-    .setTitle('Orlando Roleplay — Command Directory')
+    .setTitle('ERLCX — Command Directory')
     .setDescription(
       `> **Section ${safePage + 1} of ${totalPages}** | **${categoryTitles[safePage]}**\n` +
       `> Click any command tag below to execute directly in Discord.\n\n` +
       pageContent
     )
     .setFooter({
-      text: `Orlando Roleplay Systems | Page ${safePage + 1} of ${totalPages}`
+      text: `ERLCX Systems | Page ${safePage + 1} of ${totalPages}`
     });
 
   const bannerPath = './assets/bottom-banner.png';

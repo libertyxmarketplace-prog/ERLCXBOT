@@ -1,4 +1,4 @@
-# 🌴 Orlando Support - Discord Ticket System
+# 🌴 ERLCX - Discord Ticket System
 
 A production-ready, modern Discord Ticket System built with **discord.js v14** (ESM), local JSON file persistence, live auto-updating panels, interactive modals, responsive control panels, and standalone styled HTML transcripts with retroactive reason editing.
 
@@ -22,7 +22,7 @@ GUILD_ID=your_discord_server_id_here   # Recommended for instant slash command r
 
 ### 3. Customize Config (`config.js`)
 Open `config.js` to customize:
-- `BANNER_URL`: Pre-configured to your Orlando Support banner!
+- `BANNER_URL`: Pre-configured to your ERLCX banner!
 - `TRANSCRIPTS_CHANNEL_ID`: Channel ID where ticket logs & HTML transcripts are dispatched.
 - `STAFF_ROLE_IDS`: Array of Role IDs permitted to view, claim, and manage tickets.
 - `CATEGORIES`: Pre-configured with:

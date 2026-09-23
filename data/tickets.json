@@ -1,19 +1,5 @@
 {
   "active": {
-    "1550286332918501436": {
-      "channelId": "1550286332918501436",
-      "channelName": "ticket-kims3166",
-      "authorId": "523693281541095424",
-      "authorTag": "kims3166",
-      "category": "management",
-      "categoryLabel": "Management",
-      "reason": "testtt",
-      "claimedBy": null,
-      "claimedTag": null,
-      "createdAt": 1789687470317,
-      "controlMessageId": "1550286338870354056",
-      "updatedAt": 1789687471603
-    },
     "1550292871603818580": {
       "channelId": "1550292871603818580",
       "channelName": "ticket-samahh4",
