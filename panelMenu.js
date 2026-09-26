@@ -8,6 +8,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const LOCAL_BANNER_PATH = path.join(__dirname, 'assets', 'bottom-banner.png');
+const CONFIG_HEADER_PATH = path.join(__dirname, 'assets', 'config-header.png');
+
+/**
+ * Returns top header banner information for /config
+ */
+export function getConfigHeaderBanner() {
+  if (fs.existsSync(CONFIG_HEADER_PATH)) {
+    return {
+      mediaUrl: 'attachment://config-header.png',
+      attachment: new AttachmentBuilder(CONFIG_HEADER_PATH, { name: 'config-header.png' })
+    };
+  }
+  return { mediaUrl: null, attachment: null };
+}
 
 /**
  * Returns bottom banner information for V2 components

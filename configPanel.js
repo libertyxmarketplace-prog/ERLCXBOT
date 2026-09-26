@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { getBotInstance } from './botManager.js';
 import { AI_CAPABILITIES } from './aiConfigAssistant.js';
-import { getPanelBottomBanner } from './panelMenu.js';
+import { getPanelBottomBanner, getConfigHeaderBanner } from './panelMenu.js';
 
 export const TOTAL_PAGES = 8;
 
@@ -58,6 +58,19 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
 
   const containerComponents = [];
   const files = [];
+
+  // Big, premium /CONFIG top header banner inside the container
+  const headerBanner = getConfigHeaderBanner();
+  if (headerBanner.mediaUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [{ media: { url: headerBanner.mediaUrl } }]
+    });
+
+    if (includeAttachment && headerBanner.attachment) {
+      files.push(headerBanner.attachment);
+    }
+  }
 
   switch (activePage) {
     // ══════════════════════════════════════════════════════════════════════

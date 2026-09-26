@@ -579,7 +579,6 @@ export const erlcxMasterCommands = [
   new SlashCommandBuilder()
     .setName('config')
     .setDescription('Open the interactive bot configuration control panel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addIntegerOption(opt =>
       opt
         .setName('page')
@@ -591,7 +590,7 @@ export const erlcxMasterCommands = [
     .addStringOption(opt =>
       opt
         .setName('bot_id')
-        .setDescription('Specific Bot Identification Number to configure (Admins only)')
+        .setDescription('Specific Bot Identification Number to configure')
         .setRequired(false)
     ),
   new SlashCommandBuilder()
@@ -626,7 +625,6 @@ export const configOnlyCommand = [
   new SlashCommandBuilder()
     .setName('config')
     .setDescription('Configure your bot instance, credentials, and settings')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addIntegerOption(opt =>
       opt
         .setName('page')

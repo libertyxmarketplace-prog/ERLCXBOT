@@ -1872,16 +1872,6 @@ export async function handleInteraction(interaction) {
 
         await interaction.deferReply({ flags: 64 }).catch(() => null);
 
-        const isUserStaff = isStaff(interaction.member, interaction) ||
-          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
-          interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
-
-        if (!isUserStaff) {
-          return interaction.editReply({
-            content: `${EMOJIS.CROSS} You must have Administrator or Staff permissions to access \`/config\`.`
-          });
-        }
-
         const requestedPage = interaction.options.getInteger('page') || 1;
         const requestedBotId = interaction.options.getString('bot_id');
         let targetBot = requestedBotId ? getBotInstance(requestedBotId) : getOrCreateBotInstanceForUser(interaction.user.id, interaction.guild?.id);
@@ -1889,6 +1879,16 @@ export async function handleInteraction(interaction) {
         if (!targetBot) {
           return interaction.editReply({
             content: `${EMOJIS.CROSS} Could not find bot instance with ID \`${requestedBotId}\`.`
+          });
+        }
+
+        const isUserStaff = isStaff(interaction.member, interaction) ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+
+        if (requestedBotId && !isUserStaff && targetBot.ownerUserId !== interaction.user.id) {
+          return interaction.editReply({
+            content: `${EMOJIS.CROSS} You are not authorized to configure bot \`${requestedBotId}\`. Run \`/config\` without parameters to manage your own bot.`
           });
         }
 
