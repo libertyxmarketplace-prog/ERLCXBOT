@@ -37,7 +37,6 @@ import {
 import {
   buildConfigPanelPayload,
   buildCredentialsModal,
-  buildServerCoreModal,
   buildTicketCategoryNamesModal,
   buildTicketCategorySpawnsModal,
   buildTicketCategoryPingsModal,
@@ -51,13 +50,18 @@ import {
   buildAppsModal,
   buildAppQuizModal,
   buildDocsModal,
-  buildWelcomeModal,
   buildAiKeyModal,
   buildAskAiModal,
+  buildIngameQuestionsModal,
+  buildDiscordQuestionsModal,
+  buildDocsContentModal,
+  buildDocsBannersModal,
+  buildStaffRoleModal,
   TOTAL_PAGES,
   EMOJIS
 } from './configPanel.js';
-import { startCustomerBot, startAllConfiguredBots, setInteractionHandler } from './customerBotRunner.js';
+import { buildPanelMenuPayload, getPanelBottomBanner } from './panelMenu.js';
+import { startCustomerBot, stopCustomerBot, startAllConfiguredBots, setInteractionHandler, setMessageHandler, activeCustomerClients } from './customerBotRunner.js';
 import { processAiConfigRequest, AI_CAPABILITIES } from './aiConfigAssistant.js';
 import { deployCommands } from './deploy-commands.js';
 import {
@@ -124,7 +128,8 @@ import {
   shutdownSession,
   activateLiveSessionPanel,
   buildSessionInfoCard,
-  buildHostVoteCompletedPayload
+  buildHostVoteCompletedPayload,
+  buildSessionStartupPayload
 } from './sessionManager.js';
 import {
   loadGiveaways,
@@ -263,25 +268,25 @@ function isStaff(member, interaction = null) {
     if (memberPerms.has(PermissionFlagsBits.ManageMessages)) return true;
   }
 
-  // Check custom bot configured roles (ticketPingRoleId, hostRoleId, category ping roles)
-  if (interaction) {
-    try {
-      const botInst = getBotForInteraction(interaction);
-      const cust = botInst?.customizations;
-      if (cust) {
-        if (cust.ticketPingRoleId && member?.roles?.cache?.has?.(cust.ticketPingRoleId)) return true;
-        if (cust.hostRoleId && member?.roles?.cache?.has?.(cust.hostRoleId)) return true;
-        if (cust.notificationRoleId && member?.roles?.cache?.has?.(cust.notificationRoleId)) return true;
-        if (cust.promotionStaffRoleId && member?.roles?.cache?.has?.(cust.promotionStaffRoleId)) return true;
-        if (cust.infractionStaffRoleId && member?.roles?.cache?.has?.(cust.infractionStaffRoleId)) return true;
-        if (Array.isArray(cust.ticketCategories)) {
-          for (const cat of cust.ticketCategories) {
-            if (cat?.pingRoleId && member?.roles?.cache?.has?.(cat.pingRoleId)) return true;
-          }
+  // Check custom bot configured roles (botStaffRoleId, ticketClaimRoleId, ticketPingRoleId, hostRoleId, etc.)
+  try {
+    const botInst = interaction ? getBotForInteraction(interaction) : (guild?.id ? getBotInstanceForGuild(guild.id) : null);
+    const cust = botInst?.customizations;
+    if (cust) {
+      if (cust.botStaffRoleId && member?.roles?.cache?.has?.(cust.botStaffRoleId)) return true;
+      if (cust.ticketClaimRoleId && member?.roles?.cache?.has?.(cust.ticketClaimRoleId)) return true;
+      if (cust.ticketPingRoleId && member?.roles?.cache?.has?.(cust.ticketPingRoleId)) return true;
+      if (cust.hostRoleId && member?.roles?.cache?.has?.(cust.hostRoleId)) return true;
+      if (cust.notificationRoleId && member?.roles?.cache?.has?.(cust.notificationRoleId)) return true;
+      if (cust.promotionStaffRoleId && member?.roles?.cache?.has?.(cust.promotionStaffRoleId)) return true;
+      if (cust.infractionStaffRoleId && member?.roles?.cache?.has?.(cust.infractionStaffRoleId)) return true;
+      if (Array.isArray(cust.ticketCategories)) {
+        for (const cat of cust.ticketCategories) {
+          if (cat?.pingRoleId && member?.roles?.cache?.has?.(cat.pingRoleId)) return true;
         }
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   // Check configured staff roles
   if (Array.isArray(CONFIG.STAFF_ROLE_IDS) && CONFIG.STAFF_ROLE_IDS.length > 0) {
@@ -460,15 +465,21 @@ async function closeTicketWorkflow(channel, closedByUser, reasonOverride = null)
 
   // 3. Post to Transcripts Channel
   let logMessageId = null;
-  if (CONFIG.TRANSCRIPTS_CHANNEL_ID && !CONFIG.TRANSCRIPTS_CHANNEL_ID.includes('PASTE')) {
+  const botInst = getBotInstanceForGuild(channel.guild?.id);
+  const cust = botInst?.customizations;
+  const targetTranscriptsChannelId = cust?.transcriptsChannelId || CONFIG.TRANSCRIPTS_CHANNEL_ID;
+
+  if (targetTranscriptsChannelId && !targetTranscriptsChannelId.includes('PASTE')) {
     try {
-      const logChannel = await client.channels.fetch(CONFIG.TRANSCRIPTS_CHANNEL_ID).catch(() => null);
+      const discordClient = channel.client || client;
+      const logChannel = await discordClient.channels.fetch(targetTranscriptsChannelId).catch(() => null);
       if (logChannel) {
-        // Bottom banner image: use local asset if present, or fallback to config URL
-        const bannerFile = fs.existsSync('./assets/bottom-banner.png')
+        // Bottom banner image: use custom bottom banner if set, or local asset
+        const bannerUrl = cust?.bottomBannerUrl || CONFIG.BOTTOM_BANNER_URL;
+        const bannerFile = !cust?.bottomBannerUrl && fs.existsSync('./assets/bottom-banner.png')
           ? new AttachmentBuilder('./assets/bottom-banner.png', { name: 'bottom-banner.png' })
           : null;
-        const bannerImgRef = bannerFile ? 'attachment://bottom-banner.png' : CONFIG.BOTTOM_BANNER_URL;
+        const bannerImgRef = bannerFile ? 'attachment://bottom-banner.png' : bannerUrl;
 
         const logPayload = buildTranscriptLogEmbed({
           channelName: channel.name,
@@ -487,7 +498,7 @@ async function closeTicketWorkflow(channel, closedByUser, reasonOverride = null)
           logPayload.files = [bannerFile];
         }
 
-        // Send clean log embed (NO html file attached to this message, keeping top clean!)
+        // Send clean log embed
         const logMsg = await logChannel.send(logPayload);
         logMessageId = logMsg.id;
 
@@ -557,6 +568,38 @@ async function closeTicketWorkflow(channel, closedByUser, reasonOverride = null)
     logMessageId: logMessageId
   });
 
+  // 5. Send Direct Message with Transcript to the Ticket Creator
+  if (ticketData.authorId) {
+    try {
+      const discordClient = channel.client || client;
+      const authorUser = await discordClient.users.fetch(ticketData.authorId).catch(() => null);
+      if (authorUser) {
+        const dmEmbed = new EmbedBuilder()
+          .setColor(0x0a84fd)
+          .setTitle(`Support Ticket Closed | #${channel.name}`)
+          .setDescription(
+            `> Your support ticket **#${channel.name}** in **${channel.guild?.name || 'the server'}** has concluded.\n\n` +
+            `• **Closed By:** <@${closedByUser.id}> (\`${closedByUser.tag || closedByUser.id}\`)\n` +
+            `• **Resolution Reason:** ${closeReason}\n` +
+            `• **Duration:** ${durationStr}\n\n` +
+            `*A complete transcript file has been archived and attached below for your records.*`
+          )
+          .setFooter({ text: `${channel.guild?.name || 'ERLCX'} Support` })
+          .setTimestamp();
+
+        const dmPayload = { embeds: [dmEmbed] };
+        if (transcriptAttachment) {
+          dmPayload.files = [transcriptAttachment];
+        }
+        await authorUser.send(dmPayload).catch(dmErr => {
+          console.warn(`[closeTicketWorkflow] User ${ticketData.authorId} has DMs disabled:`, dmErr.message);
+        });
+      }
+    } catch (dmErr) {
+      console.warn(`[closeTicketWorkflow] Could not DM ticket author:`, dmErr.message);
+    }
+  }
+
   // 6. Delete the channel
   try {
     await channel.delete(`Ticket closed by ${closedByUser.tag}: ${closeReason}`);
@@ -582,11 +625,7 @@ client.once(Events.ClientReady, async () => {
   await checkAndExpireLoas(client);
   initMusicEngine();
   try {
-    // 1. Deploy Global Slash Commands for Master Bot (visible across all servers)
-    await deployCommands(null, null, null, false, true);
-    console.log('[MASTER BOT] Master global slash commands deployed successfully.');
-
-    // 2. Also register directly to every server the bot is currently in for instant availability
+    // Register commands directly to every guild for instant availability without duplicate commands
     for (const guild of client.guilds.cache.values()) {
       try {
         await deployCommands(process.env.DISCORD_TOKEN, client.user.id, guild.id, false, true);
@@ -600,12 +639,25 @@ client.once(Events.ClientReady, async () => {
   }
   await startAllConfiguredBots();
 
-  // Auto-refresh live session panels every 60 seconds
+  // Auto-refresh live session panels every 60 seconds (master and all customer bots)
   setInterval(async () => {
     try {
       await updateAllSessionPanels(client);
     } catch (e) {
-      console.warn('Session auto-update error:', e.message);
+      console.warn('Session auto-update error (master):', e.message);
+    }
+
+    try {
+      const bots = listBots();
+      for (const bot of bots) {
+        if (!bot.botId) continue;
+        const custClient = activeCustomerClients.get(bot.botId);
+        if (custClient && custClient.isReady()) {
+          await updateAllSessionPanels(custClient, bot).catch(() => null);
+        }
+      }
+    } catch (e) {
+      console.warn('Session auto-update error (customer bots):', e.message);
     }
   }, 60 * 1000);
 
@@ -758,7 +810,7 @@ client.on(Events.GuildMemberAdd, async member => {
 /*                             PREFIX COMMANDS                                */
 /* ========================================================================== */
 
-client.on(Events.MessageCreate, async message => {
+export async function handleMessageCreate(message) {
   try {
     if (message.author.bot) return;
 
@@ -774,8 +826,8 @@ client.on(Events.MessageCreate, async message => {
     }
 
     // Check if the bot is mentioned for AI bot configuration
-    if (message.mentions.has(client.user?.id) && !message.mentions.everyone) {
-      const prompt = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
+    if (message.mentions.has(message.client?.user?.id) && !message.mentions.everyone) {
+      const prompt = message.content.replace(new RegExp(`<@!?${message.client.user.id}>`, 'g'), '').trim();
       if (prompt.length > 0) {
         const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
         if (!botInst) {
@@ -793,7 +845,7 @@ client.on(Events.MessageCreate, async message => {
         });
 
         if (result.success) {
-          let replyContent = `🤖 **AI Assistant:**\n${result.reply}`;
+          let replyContent = `**AI Assistant:**\n${result.reply}`;
           if (result.changes && result.changes.length > 0) {
             replyContent += `\n\n**Applied Changes:**\n` + result.changes.map(c => `• \`${c.field}\`: \`${c.value}\``).join('\n');
           }
@@ -820,6 +872,65 @@ client.on(Events.MessageCreate, async message => {
       }, 3500);
     };
 
+    // -claim (claim active ticket)
+    if (command === 'claim') {
+      const activeTicket = getActiveTicket(message.channel.id);
+      if (!activeTicket) {
+        return sendCleanFeedback('This command can only be used inside an active ticket channel.');
+      }
+      const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
+      const cust = botInst?.customizations;
+      const canClaim = isStaff(message.member) || (cust?.ticketClaimRoleId && message.member.roles.cache.has(cust.ticketClaimRoleId));
+      if (!canClaim) {
+        return sendCleanFeedback(cust?.ticketClaimRoleId ? `Only members with the <@&${cust.ticketClaimRoleId}> role or staff can claim tickets.` : 'Only staff members can claim tickets.');
+      }
+      activeTicket.claimedBy = message.author.id;
+      activeTicket.claimedTag = message.author.tag;
+      saveActiveTicket(message.channel.id, activeTicket);
+
+      const updatedControl = buildTicketControl(activeTicket, cust);
+      try {
+        if (activeTicket.controlMessageId) {
+          const ctrlMsg = await message.channel.messages.fetch(activeTicket.controlMessageId).catch(() => null);
+          if (ctrlMsg) await ctrlMsg.edit(updatedControl).catch(() => null);
+        }
+      } catch {}
+
+      const claimEmbed = new EmbedBuilder()
+        .setDescription(`> <@${message.author.id}> has claimed this ticket.`);
+      await message.delete().catch(() => null);
+      return message.channel.send({ embeds: [claimEmbed] });
+    }
+
+    // -unclaim (unclaim active ticket)
+    if (command === 'unclaim') {
+      const activeTicket = getActiveTicket(message.channel.id);
+      if (!activeTicket) {
+        return sendCleanFeedback('This command can only be used inside an active ticket channel.');
+      }
+      if (activeTicket.claimedBy !== message.author.id && !isStaff(message.member)) {
+        return sendCleanFeedback('Only the assigned handler or an administrator can unclaim this ticket.');
+      }
+      activeTicket.claimedBy = null;
+      activeTicket.claimedTag = null;
+      saveActiveTicket(message.channel.id, activeTicket);
+
+      const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
+      const cust = botInst?.customizations;
+      const updatedControl = buildTicketControl(activeTicket, cust);
+      try {
+        if (activeTicket.controlMessageId) {
+          const ctrlMsg = await message.channel.messages.fetch(activeTicket.controlMessageId).catch(() => null);
+          if (ctrlMsg) await ctrlMsg.edit(updatedControl).catch(() => null);
+        }
+      } catch {}
+
+      const unclaimEmbed = new EmbedBuilder()
+        .setDescription(`> This ticket has been unclaimed and returned to staff queue.`);
+      await message.delete().catch(() => null);
+      return message.channel.send({ embeds: [unclaimEmbed] });
+    }
+
     // -add @user / -add <userId>
     if (command === 'add') {
       const activeTicket = getActiveTicket(message.channel.id);
@@ -833,7 +944,7 @@ client.on(Events.MessageCreate, async message => {
 
       const rawTarget = args[0];
       const targetUser = message.mentions.users.first() || 
-        (rawTarget ? await client.users.fetch(rawTarget.replace(/[^0-9]/g, '')).catch(() => null) : null);
+        (rawTarget ? await (message.client || client).users.fetch(rawTarget.replace(/[^0-9]/g, '')).catch(() => null) : null);
 
       if (!targetUser) {
         return sendCleanFeedback('Please mention a user or provide an ID: `-add @user`');
@@ -868,7 +979,7 @@ client.on(Events.MessageCreate, async message => {
 
       const rawTarget = args[0];
       const targetUser = message.mentions.users.first() || 
-        (rawTarget ? await client.users.fetch(rawTarget.replace(/[^0-9]/g, '')).catch(() => null) : null);
+        (rawTarget ? await (message.client || client).users.fetch(rawTarget.replace(/[^0-9]/g, '')).catch(() => null) : null);
 
       if (!targetUser) {
         return sendCleanFeedback('Please mention a user or provide an ID: `-remove @user`');
@@ -888,7 +999,57 @@ client.on(Events.MessageCreate, async message => {
       return;
     }
 
-    // Check staff permissions for management prefix commands
+    // -purge / -clear <amount> [user]
+    if (command === 'purge' || command === 'clear') {
+      if (!isStaff(message.member)) {
+        return sendCleanFeedback('You must have staff permissions to purge messages.');
+      }
+      const rawCount = parseInt(args[0], 10);
+      if (isNaN(rawCount) || rawCount < 1 || rawCount > 100) {
+        return sendCleanFeedback('Usage: `-purge <1-100> [@user optional]`');
+      }
+      const targetUser = message.mentions.users.first();
+      await message.delete().catch(() => null);
+
+      try {
+        const fetched = await message.channel.messages.fetch({ limit: Math.min(100, rawCount + (targetUser ? 20 : 0)) });
+        const toDelete = targetUser
+          ? fetched.filter(m => m.author.id === targetUser.id).first(rawCount)
+          : fetched.first(rawCount);
+
+        const deleted = await message.channel.bulkDelete(toDelete, true);
+        const purgeEmbed = new EmbedBuilder()
+          .setColor(0x0a84fd)
+          .setDescription(`> Successfully purged **${deleted.size}** messages${targetUser ? ` from <@${targetUser.id}>` : ''}.`)
+          .setFooter({ text: `${message.guild?.name || 'Server'} Moderation` })
+          .setTimestamp();
+
+        const feedbackMsg = await message.channel.send({ embeds: [purgeEmbed] });
+        setTimeout(() => feedbackMsg.delete().catch(() => null), 5000);
+        return;
+      } catch (pErr) {
+        return sendCleanFeedback(`Purge error: ${pErr.message}`);
+      }
+    }
+
+    // -close inside active ticket channel (allowed for author, claim role, or staff)
+    const activeTicket = getActiveTicket(message.channel.id);
+    const botInstForTicket = getBotInstanceForGuild(message.guild?.id, message.author.id);
+    const custTicket = botInstForTicket?.customizations;
+    const canCloseTicket = activeTicket && (
+      activeTicket.authorId === message.author.id ||
+      isStaff(message.member) ||
+      (custTicket?.ticketClaimRoleId && message.member.roles.cache.has(custTicket.ticketClaimRoleId))
+    );
+
+    if (command === 'close' && activeTicket && canCloseTicket && (!args[0] || !['general', 'management', 'mangment', 'manage', 'all', 'report'].includes(args[0].toLowerCase()))) {
+      const reason = args.join(' ') || (activeTicket.authorId === message.author.id ? 'Closed by ticket author' : 'Closed via staff command');
+      await message.delete().catch(() => null);
+      await closeTicketWorkflow(message.channel, message.author, reason);
+      return;
+    }
+
+    // Check staff permissions for remaining management prefix commands
     if (!isStaff(message.member)) return;
 
     // -close [general|management|all|report staff|reason]
@@ -1059,8 +1220,14 @@ client.on(Events.MessageCreate, async message => {
       try {
         await message.delete().catch(() => null);
         const deleted = await message.channel.bulkDelete(rawAmount, true);
+        const purgeEmbed = new EmbedBuilder()
+          .setColor(0x0a84fd)
+          .setDescription(`Successfully purged **${deleted.size}** message${deleted.size === 1 ? '' : 's'}.`)
+          .setFooter({ text: message.guild?.name || 'Purge Operations' })
+          .setTimestamp();
+
         const confirmMsg = await message.channel.send({
-          content: `Deleted **${deleted.size}** message(s).`
+          embeds: [purgeEmbed]
         }).catch(() => null);
 
         setTimeout(async () => {
@@ -1071,34 +1238,6 @@ client.on(Events.MessageCreate, async message => {
         return sendCleanFeedback(`Could not purge messages: ${err.message}`);
       }
       return;
-    }
-
-    // -testwelcome / -welcome [on/off]
-    if (command === 'testwelcome' || command === 'welcome') {
-      if (!isStaff(message.member)) return;
-
-      const subArg = args[0]?.toLowerCase();
-      if (subArg === 'off' || subArg === 'disable') {
-        CONFIG.WELCOME.ENABLED = false;
-        return sendCleanFeedback('🔇 Welcome system has been **disabled**.');
-      } else if (subArg === 'on' || subArg === 'enable') {
-        CONFIG.WELCOME.ENABLED = true;
-        return sendCleanFeedback('🔊 Welcome system has been **enabled**.');
-      }
-
-      const GUILD_WELCOME_MAP = {
-        '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397',
-        '1530147023754367006': '1549635572698447932'
-      };
-      const preferredId = GUILD_WELCOME_MAP[message.guild.id] || CONFIG.WELCOME.CHANNEL_ID;
-      const targetChannel = (preferredId ? message.guild.channels.cache.get(preferredId) : null) ||
-        message.guild.channels.cache.find(c => c.isTextBased() && (c.name.includes('welcome') || c.name === '𝖬𝖺𝗂𝗇' || c.name === 'main')) ||
-        message.channel;
-
-      const payload = buildWelcomePayload(message.member);
-      await targetChannel.send(payload);
-      const statusNote = CONFIG.WELCOME?.ENABLED === false ? ' *(Note: System is currently turned off for new joins)*' : '';
-      return sendCleanFeedback(`Sent test welcome message to <#${targetChannel.id}>!${statusNote}`);
     }
 
     // -department [panel] [channel] / -departments
@@ -1266,16 +1405,6 @@ client.on(Events.MessageCreate, async message => {
       return sendCleanFeedback(`Staff application results channel set to <#${channelMention.id}>.`);
     }
 
-    // -refont <text> (Convert to Mathematical Sans-Serif: 𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍)
-    if (command === 'refont') {
-      const text = args.join(' ').trim();
-      if (!text) {
-        return sendCleanFeedback('Usage: `-refont <text to convert>`');
-      }
-      const styled = toSansSerif(text);
-      await message.delete().catch(() => null);
-      return message.channel.send({ content: styled });
-    }
 
     // -commands or -help
     if (command === 'commands' || command === 'command' || command === 'help') {
@@ -1654,10 +1783,41 @@ client.on(Events.MessageCreate, async message => {
       }
       return;
     }
+
+    // -startup or -session start
+    if (command === 'startup' || (command === 'session' && args[0]?.toLowerCase() === 'start') || (command === 'start' && args[0]?.toLowerCase() === 'session')) {
+      const botInst = getBotInstanceForGuild(message.guild?.id, message.author.id);
+      const cust = botInst?.customizations || {};
+      const requiredRole = cust?.hostRoleId || cust?.botStaffRoleId;
+      const isAdmin = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
+      if (requiredRole && !message.member?.roles?.cache?.has(requiredRole) && !isAdmin && !isStaff(message.member)) {
+        return sendCleanFeedback('You must have the Host role or Administrator permissions to start a session.');
+      }
+      const targetChannel = message.mentions.channels.first()
+        || (cust.sessionChannelId ? await message.guild.channels.fetch(cust.sessionChannelId).catch(() => null) : null)
+        || message.channel;
+
+      const sessionData = await fetchErlcServerDataForBot(botInst);
+      const startupPayload = buildSessionStartupPayload(sessionData, cust);
+
+      try {
+        await message.delete().catch(() => null);
+        if (cust.notificationRoleId) {
+          await targetChannel.send({ content: `<@&${cust.notificationRoleId}>` }).catch(() => null);
+        }
+        await targetChannel.send(startupPayload);
+      } catch (err) {
+        return sendCleanFeedback(`Failed to post session startup: ${err.message}`);
+      }
+      return;
+    }
   } catch (err) {
     console.error('Error handling prefix command:', err);
   }
-});
+}
+
+client.on(Events.MessageCreate, handleMessageCreate);
+setMessageHandler(handleMessageCreate);
 
 /* ========================================================================== */
 /*                           INTERACTION ROUTING                              */
@@ -1671,7 +1831,7 @@ export async function handleInteraction(interaction) {
     /* ---------------------------------------------------------------------- */
     const MASTER_CLIENT_ID = process.env.CLIENT_ID;
     const isMasterBot = interaction.applicationId === MASTER_CLIENT_ID;
-    const MASTER_ONLY_COMMANDS = ['config', 'banbot', 'createbot'];
+    const MASTER_ONLY_COMMANDS = ['config', 'banbot', 'createbot', 'unbanbot', 'listbots', 'retrigger'];
 
     if (isMasterBot && interaction.isChatInputCommand() && !MASTER_ONLY_COMMANDS.includes(interaction.commandName)) {
       // ERLCX is not supposed to respond to this command — silently ignore
@@ -1679,7 +1839,7 @@ export async function handleInteraction(interaction) {
     }
 
     // Also guard buttons, modals, and select menus for master bot — only cfg_ interactions pass through
-    if (isMasterBot && (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu())) {
+    if (isMasterBot && (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu())) {
       const cid = interaction.customId || '';
       if (!cid.startsWith('cfg_') && !cid.startsWith('cfg_modal') && !cid.startsWith('cfg_nav')) {
         return; // ERLCX ignores non-config UI interactions
@@ -1692,17 +1852,25 @@ export async function handleInteraction(interaction) {
     if (interaction.isChatInputCommand()) {
       const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
 
-      // Check if bot is banned
-      if (botInst && botInst.banned) {
+      // Check if bot is banned (exempt master administration commands so admins can unban/reconfigure)
+      const isMasterAdminCmd = MASTER_ONLY_COMMANDS.includes(interaction.commandName);
+      if (!isMasterAdminCmd && botInst && botInst.banned) {
         return interaction.reply({
           content: `${EMOJIS.CROSS} **Bot Instance Suspended**\n> This bot instance (\`${botInst.botId}\`) has been banned by the platform administrator.\n> **Reason:** \`${botInst.bannedReason || 'Terms violation'}\``,
           flags: 64
         });
       }
 
-      // /config [page] [bot_id]
+      // /config [page] [bot_id] (Only available on Central Master Bot)
       if (interaction.commandName === 'config') {
-        await interaction.deferReply({ flags: 32832 }).catch(() => null);
+        if (interaction.client.user.id !== client.user.id) {
+          return interaction.reply({
+            content: `${EMOJIS.CROSS} The \`/config\` command is exclusively managed through the central ERLCX bot. Please invite and run \`/config\` from the official ERLCX bot.`,
+            flags: 64
+          });
+        }
+
+        await interaction.deferReply({ flags: 64 }).catch(() => null);
 
         const isUserStaff = isStaff(interaction.member, interaction) ||
           interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
@@ -1724,9 +1892,37 @@ export async function handleInteraction(interaction) {
           });
         }
 
-        const payload = buildConfigPanelPayload(targetBot.botId, requestedPage);
+        const payload = buildConfigPanelPayload(targetBot.botId, requestedPage, true);
         return interaction.editReply(payload).catch(err => {
           console.error('[CONFIG] editReply error:', err);
+        });
+      }
+
+      // /panel [channel] (Unified V2 Panel Menu - instant dispatch controller)
+      if (interaction.commandName === 'panel') {
+        await interaction.deferReply({ flags: 64 }).catch(() => null);
+
+        const isUserStaff = isStaff(interaction.member, interaction) ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+          interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+
+        if (!isUserStaff) {
+          return interaction.editReply({
+            content: `${EMOJIS.CROSS} You must have Staff or Administrator permissions to access the Panel Menu.`
+          });
+        }
+
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
+        const payload = buildPanelMenuPayload({
+          targetChannelId: targetChannel.id,
+          includeAttachment: true,
+          customizations: botInst?.customizations,
+          guildName: interaction.guild?.name
+        });
+
+        return interaction.editReply(payload).catch(err => {
+          console.error('[PANEL] editReply error:', err);
         });
       }
 
@@ -1750,13 +1946,18 @@ export async function handleInteraction(interaction) {
         const isOwner = interaction.user.id === interaction.guild?.ownerId ||
           interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
         if (!isOwner) {
-          return interaction.reply({ content: '❌ Only administrators can retrigger bot instances.', ephemeral: true });
+          return interaction.reply({ content: '❌ Only administrators can retrigger bot instances.', flags: 64 });
         }
+        await interaction.deferReply({ flags: 64 }).catch(() => null);
         const bId = interaction.options.getString('bot_id');
         const res = retriggerBot(bId);
-        return interaction.reply({
-          content: res.success ? `🔄 **Retrigger Success:** ${res.message}` : `❌ **Retrigger Failed:** ${res.message}`,
-          ephemeral: true
+        if (res.success && res.bot) {
+          startCustomerBot(res.bot.botId).catch(err => {
+            console.warn(`[RETRIGGER] Error restarting ${res.bot.botId}:`, err.message);
+          });
+        }
+        return interaction.editReply({
+          content: res.success ? `🔄 **Retrigger Success:** ${res.message}` : `❌ **Retrigger Failed:** ${res.message}`
         });
       }
 
@@ -1765,14 +1966,17 @@ export async function handleInteraction(interaction) {
         const isOwner = interaction.user.id === interaction.guild?.ownerId ||
           interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
         if (!isOwner) {
-          return interaction.reply({ content: '❌ Only administrators can ban bot instances.', ephemeral: true });
+          return interaction.reply({ content: '❌ Only administrators can ban bot instances.', flags: 64 });
         }
+        await interaction.deferReply({ flags: 64 }).catch(() => null);
         const bId = interaction.options.getString('bot_id');
         const reason = interaction.options.getString('reason') || 'Violation of service terms';
         const res = banBot(bId, reason);
-        return interaction.reply({
-          content: res.success ? `⛔ **Bot Banned:** ${res.message}` : `❌ **Failed to Ban Bot:** ${res.message}`,
-          ephemeral: true
+        if (res.success && res.bot) {
+          await stopCustomerBot(res.bot.botId);
+        }
+        return interaction.editReply({
+          content: res.success ? `⛔ **Bot Banned & Disconnected:** ${res.message}` : `❌ **Failed to Ban Bot:** ${res.message}`
         });
       }
 
@@ -1781,13 +1985,20 @@ export async function handleInteraction(interaction) {
         const isOwner = interaction.user.id === interaction.guild?.ownerId ||
           interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
         if (!isOwner) {
-          return interaction.reply({ content: '❌ Only administrators can unban bot instances.', ephemeral: true });
+          return interaction.reply({ content: '❌ Only administrators can unban bot instances.', flags: 64 });
         }
+        await interaction.deferReply({ flags: 64 }).catch(() => null);
         const bId = interaction.options.getString('bot_id');
         const res = unbanBot(bId);
-        return interaction.reply({
-          content: res.success ? `✅ **Bot Unbanned:** ${res.message}` : `❌ **Failed to Unban Bot:** ${res.message}`,
-          ephemeral: true
+        if (res.success && res.bot) {
+          if (res.bot.token && res.bot.setupCompleted) {
+            startCustomerBot(res.bot.botId).catch(err => {
+              console.warn(`[UNBAN] Error starting bot ${res.bot.botId}:`, err.message);
+            });
+          }
+        }
+        return interaction.editReply({
+          content: res.success ? `✅ **Bot Unbanned:** ${res.message}` : `❌ **Failed to Unban Bot:** ${res.message}`
         });
       }
 
@@ -1933,9 +2144,49 @@ export async function handleInteraction(interaction) {
         }
       }
 
-      // /session commands (panel, vote)
+      // /session commands (start, panel, shutdown, info, vote)
       if (interaction.commandName === 'session') {
         const subcommand = interaction.options.getSubcommand();
+
+        if (subcommand === 'start') {
+          await interaction.deferReply({ flags: 64 });
+
+          if (!isStaff(interaction.member, interaction)) {
+            return interaction.editReply({
+              content: 'You must be a staff member or administrator to start a session.'
+            });
+          }
+
+          const targetChannel = interaction.options.getChannel('channel')
+            || (CONFIG.SESSION.CHANNEL_ID ? await interaction.client.channels.fetch(CONFIG.SESSION.CHANNEL_ID).catch(() => null) : null)
+            || interaction.channel;
+
+          const botInst = getBotForInteraction(interaction);
+          const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+          const codeOpt = interaction.options.getString('code');
+
+          try {
+            if (cust.sessionNotificationRoleId) {
+              await targetChannel.send({ content: `<@&${cust.sessionNotificationRoleId}>` }).catch(() => null);
+            }
+
+            const startupPayload = buildSessionStartupPayload({ joinCode: codeOpt || cust.joinCode || '' }, {
+              ...cust,
+              serverName: cust.serverName || interaction.guild?.name || 'Server'
+            });
+            await targetChannel.send(startupPayload);
+
+            return interaction.editReply({
+              content: `Official Session Startup announcement successfully posted to <#${targetChannel.id}>!`
+            });
+          } catch (err) {
+            console.error('Failed to post session startup:', err);
+            return interaction.editReply({
+              content: `Failed to post session startup: ${err.message}`
+            });
+          }
+        }
+
         if (subcommand === 'panel') {
           await interaction.deferReply({ flags: 64 });
 
@@ -2055,12 +2306,17 @@ export async function handleInteraction(interaction) {
             status: 'active'
           };
 
+          const botInst = getBotForInteraction(interaction);
+          const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+          vote.serverName = cust.serverName || interaction.guild?.name || 'Server';
+          vote.customizations = cust;
+
           try {
             if (pingRole?.id) {
               await targetChannel.send({ content: `<@&${pingRole.id}>` });
             }
 
-            const payload = buildSessionVotePayload(vote);
+            const payload = buildSessionVotePayload(vote, cust);
             const sentMsg = await targetChannel.send(payload);
             vote.messageId = sentMsg.id;
             saveSessionVote(vote);
@@ -2268,57 +2524,38 @@ export async function handleInteraction(interaction) {
         return;
       }
 
-      // /welcome [action: test/status/enable/disable] | /testwelcome
-      if (interaction.commandName === 'welcome' || interaction.commandName === 'testwelcome') {
+      // /purge <amount>
+      if (interaction.commandName === 'purge') {
         await interaction.deferReply({ flags: 64 });
 
-        if (!isStaff(interaction.member, interaction)) {
+        if (!isStaff(interaction.member, interaction) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
           return interaction.editReply({
-            content: 'You must be a staff member or administrator to run this command.'
+            content: `${EMOJIS.CROSS} You do not have permission to purge messages.`
           });
         }
 
-        const sub = interaction.options.getSubcommand?.(false);
-        if (sub === 'disable' || sub === 'off') {
-          CONFIG.WELCOME.ENABLED = false;
+        const amount = interaction.options.getInteger('amount');
+        if (!amount || amount < 1 || amount > 100) {
           return interaction.editReply({
-            content: '🔇 Welcome system has been **disabled** for new joins.'
+            content: 'Please specify an amount between 1 and 100 messages to purge.'
           });
         }
-        if (sub === 'enable' || sub === 'on') {
-          CONFIG.WELCOME.ENABLED = true;
-          return interaction.editReply({
-            content: '🔊 Welcome system has been **enabled** for new joins.'
-          });
-        }
-        if (sub === 'status') {
-          const status = CONFIG.WELCOME?.ENABLED ? '🟢 Enabled' : '🔴 Disabled';
-          return interaction.editReply({
-            content: `**Welcome System Status:** ${status}\nTarget Channel: <#${CONFIG.WELCOME.CHANNEL_ID}>`
-          });
-        }
-
-        // test subcommand or default
-        const GUILD_WELCOME_MAP = {
-          '1541210827967823955': CONFIG.WELCOME.CHANNEL_ID || '1548147497854181397',
-          '1530147023754367006': '1549635572698447932'
-        };
-        const preferredId = GUILD_WELCOME_MAP[interaction.guild.id] || CONFIG.WELCOME.CHANNEL_ID;
-        const targetChannel = interaction.options.getChannel?.('channel') ||
-          (preferredId ? interaction.guild.channels.cache.get(preferredId) : null) ||
-          interaction.channel;
 
         try {
-          const payload = buildWelcomePayload(interaction.member);
-          await targetChannel.send(payload);
-          const statusNote = CONFIG.WELCOME?.ENABLED === false ? ' *(Note: Welcome system is currently turned off for new joins)*' : '';
-          return interaction.editReply({
-            content: `Successfully sent test welcome card to <#${targetChannel.id}>!${statusNote}`
-          });
+          const messages = await interaction.channel.messages.fetch({ limit: amount });
+          const deleted = await interaction.channel.bulkDelete(messages, true);
+
+          const purgeEmbed = new EmbedBuilder()
+            .setColor(0x0a84fd)
+            .setDescription(`Successfully purged **${deleted.size}** message${deleted.size === 1 ? '' : 's'}.`)
+            .setFooter({ text: interaction.guild?.name || 'Purge Operations' })
+            .setTimestamp();
+
+          return interaction.editReply({ embeds: [purgeEmbed] });
         } catch (err) {
-          console.error('Error sending test welcome:', err);
+          console.error('Failed to purge messages:', err);
           return interaction.editReply({
-            content: `Failed to send test welcome message: ${err.message}`
+            content: `Failed to purge messages: ${err.message}`
           });
         }
       }
@@ -2605,12 +2842,6 @@ export async function handleInteraction(interaction) {
         return;
       }
 
-      // /refont <text>
-      if (interaction.commandName === 'refont') {
-        const text = interaction.options.getString('text');
-        const styled = toSansSerif(text || '');
-        return interaction.reply({ content: styled });
-      }
 
       // /media <image> [title] [caption] [credit] [ping] [channel]
       if (interaction.commandName === 'media') {
@@ -2917,17 +3148,159 @@ export async function handleInteraction(interaction) {
     /* 2. CATEGORY SELECT MENU (TICKET CREATION MODAL TRIGGER)                */
     /* ---------------------------------------------------------------------- */
     if (interaction.isStringSelectMenu()) {
+      // Unified V2 Panel Menu - Panel Dispatch Selector
+      if (interaction.customId.startsWith('panel_menu_select_')) {
+        const chanIdRaw = interaction.customId.replace('panel_menu_select_', '');
+        const targetChannel = (chanIdRaw && chanIdRaw !== 'current')
+          ? (interaction.guild.channels.cache.get(chanIdRaw) || await interaction.client.channels.fetch(chanIdRaw).catch(() => null))
+          : interaction.channel;
+
+        if (!targetChannel) {
+          return interaction.reply({ content: '❌ Target destination channel could not be found.', ephemeral: true });
+        }
+
+        const selectedValue = interaction.values[0];
+        const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
+        const cust = botInst?.customizations || {};
+
+        let statusText = '';
+        let isErr = false;
+
+        try {
+          if (selectedValue === 'dispatch_ticket') {
+            const panelPayload = buildTicketPanel(null, cust);
+            const sentMsg = await targetChannel.send(panelPayload);
+            addPanelRecord(targetChannel.id, sentMsg.id);
+            statusText = `Ticket Support Desk successfully dispatched to <#${targetChannel.id}>!`;
+          } else if (selectedValue === 'dispatch_session') {
+            await activateLiveSessionPanel(interaction.client, targetChannel.id, botInst);
+            statusText = `ER:LC Live Session Panel successfully dispatched to <#${targetChannel.id}>!`;
+          } else if (selectedValue === 'dispatch_staffdocs') {
+            const payload = buildStaffDocsHubPayload(cust);
+            await targetChannel.send(payload);
+            statusText = `Staff Documentation Hub successfully dispatched to <#${targetChannel.id}>!`;
+          } else if (selectedValue === 'dispatch_application') {
+            const panelPayload = buildApplicationPanel(cust);
+            await targetChannel.send(panelPayload);
+            statusText = `Staff Application Desk successfully dispatched to <#${targetChannel.id}>!`;
+          } else if (selectedValue === 'dispatch_department') {
+            await postDepartmentPanel(targetChannel);
+            statusText = `Department Information Panel successfully dispatched to <#${targetChannel.id}>!`;
+          } else if (selectedValue === 'dispatch_askai') {
+            const communityName = cust.serverName || interaction.guild?.name || 'Server';
+            const aiPayload = {
+              flags: 32768,
+              components: [
+                {
+                  type: 17,
+                  components: [
+                    {
+                      type: 10,
+                      content: [
+                        `# <:cheers:1552548989172195399> ・ ${communityName} Automated AI Support Desk`,
+                        `> Need instant answers regarding server rules, department guides, or community policies?`,
+                        `> Click the button below to query the automated AI intelligence assistant.`,
+                        ``,
+                        `*Responses are generated autonomously based on server documentation.*`
+                      ].join('\n')
+                    },
+                    { type: 14, divider: true, spacing: 1 },
+                    {
+                      type: 1,
+                      components: [
+                        {
+                          type: 2,
+                          style: 1,
+                          label: 'Ask AI Assistant',
+                          custom_id: `cfg_btn_askai_${botInst ? botInst.botId : MASTER_BOT_ID}`
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            };
+            await targetChannel.send(aiPayload);
+            statusText = `Ask AI Assistant Panel successfully dispatched to <#${targetChannel.id}>!`;
+          }
+        } catch (err) {
+          console.error('[PANEL MENU DISPATCH ERROR]:', err);
+          statusText = `Failed to dispatch panel: ${err.message}`;
+          isErr = true;
+        }
+
+        const updatedPayload = buildPanelMenuPayload({
+          targetChannelId: targetChannel.id,
+          statusMessage: statusText,
+          statusType: isErr ? 'error' : 'success',
+          includeAttachment: false,
+          customizations: cust
+        });
+
+        return interaction.update(updatedPayload).catch(async () => {
+          return interaction.reply({ content: statusText, ephemeral: true }).catch(() => null);
+        });
+      }
+
       // /config category navigation select menu
       if (interaction.customId.startsWith('cfg_select_page_')) {
         await interaction.deferUpdate().catch(() => null);
         const botId = interaction.customId.replace('cfg_select_page_', '');
         const targetPage = parseInt(interaction.values[0], 10) || 1;
-        const payload = buildConfigPanelPayload(botId, targetPage);
+        const payload = buildConfigPanelPayload(botId, targetPage, false);
         return interaction.editReply(payload).catch(() => null);
       }
 
+      // /config domain action select menu (Pages 2-8 dropdown modals)
+      if (interaction.customId.startsWith('cfg_select_action_')) {
+        const botId = interaction.customId.replace('cfg_select_action_', '');
+        const action = interaction.values[0];
+
+        switch (action) {
+          case 'edit_ticket_catnames':
+            return interaction.showModal(buildTicketCategoryNamesModal(botId)).catch(() => null);
+          case 'edit_ticket_catspawns':
+            return interaction.showModal(buildTicketCategorySpawnsModal(botId)).catch(() => null);
+          case 'edit_ticket_catpings':
+            return interaction.showModal(buildTicketCategoryPingsModal(botId)).catch(() => null);
+          case 'edit_ticket_text':
+            return interaction.showModal(buildSupportTextModal(botId)).catch(() => null);
+          case 'edit_ticket_banners':
+            return interaction.showModal(buildTicketBannersModal(botId)).catch(() => null);
+          case 'edit_session_channels':
+            return interaction.showModal(buildSessionChannelsModal(botId)).catch(() => null);
+          case 'edit_session_banners':
+            return interaction.showModal(buildSessionBannersModal(botId)).catch(() => null);
+          case 'edit_session_text':
+            return interaction.showModal(buildSessionTextModal(botId)).catch(() => null);
+          case 'edit_app_channels':
+            return interaction.showModal(buildAppsModal(botId)).catch(() => null);
+          case 'edit_app_questions':
+          case 'edit_app_questions_ingame':
+            return interaction.showModal(buildIngameQuestionsModal(botId)).catch(() => null);
+          case 'edit_app_questions_discord':
+            return interaction.showModal(buildDiscordQuestionsModal(botId)).catch(() => null);
+          case 'edit_staffdocs_content':
+            return interaction.showModal(buildDocsContentModal(botId)).catch(() => null);
+          case 'edit_staffdocs_banners':
+            return interaction.showModal(buildDocsBannersModal(botId)).catch(() => null);
+          case 'edit_staffdocs_channel':
+            return interaction.showModal(buildDocsModal(botId)).catch(() => null);
+          case 'edit_staffrole':
+            return interaction.showModal(buildStaffRoleModal(botId)).catch(() => null);
+          case 'edit_promotions':
+            return interaction.showModal(buildPromotionConfigModal(botId)).catch(() => null);
+          case 'edit_infractions':
+            return interaction.showModal(buildInfractionConfigModal(botId)).catch(() => null);
+          case 'edit_ai_key':
+            return interaction.showModal(buildAiKeyModal(botId)).catch(() => null);
+          case 'ask_ai':
+            return interaction.showModal(buildAskAiModal(botId)).catch(() => null);
+        }
+      }
+
       // Staff Documentation Dropdown Selector (strictly zero emojis)
-      if (interaction.customId === 'staff_docs_select') {
+      if (interaction.customId === 'staff_docs_select' || interaction.customId === 'staffdoc_select_category') {
         const sectionId = interaction.values[0];
         const payload = buildStaffDocSectionPayload(sectionId);
         return interaction.reply({
@@ -2982,9 +3355,20 @@ export async function handleInteraction(interaction) {
       }
 
       if (interaction.customId === 'ticket_category_select') {
-        const selectedValue = interaction.values[0]; // e.g. ticket_cat_general
+        const selectedValue = interaction.values[0]; // e.g. ticket_cat_cat_1 or ticket_cat_general
         const categoryId = selectedValue.replace('ticket_cat_', '');
-        const category = CONFIG.CATEGORIES.find(c => c.id === categoryId);
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations;
+        const customCats = Array.isArray(cust?.ticketCategories) ? cust.ticketCategories : [];
+        const customCat = customCats.find(c => c.id === categoryId || c.name?.toLowerCase() === categoryId.toLowerCase());
+        const fallbackCat = CONFIG.CATEGORIES.find(c => c.id === categoryId);
+
+        const category = customCat ? {
+          id: customCat.id,
+          label: customCat.name,
+          categoryId: customCat.spawnCategoryId || cust?.ticketCategoryId || null,
+          pingRoleId: customCat.pingRoleId || cust?.ticketPingRoleId || null
+        } : fallbackCat;
 
         if (!category) {
           return interaction.reply({
@@ -3019,10 +3403,10 @@ export async function handleInteraction(interaction) {
           });
         }
 
-        // Present Modal for Ticket Reason without emojis
+        // Present Modal for Ticket Reason
         const modal = new ModalBuilder()
           .setCustomId(`modal_open_${categoryId}`)
-          .setTitle(`${category.label}`);
+          .setTitle(`${category.label}`.slice(0, 45));
 
         const reasonInput = new TextInputBuilder()
           .setCustomId('ticket_reason')
@@ -3054,11 +3438,31 @@ export async function handleInteraction(interaction) {
 
         updateBotInstance(botId, { token, erlcApiKey, status: 'active', setupCompleted: true });
 
+        // Automatically query ER:LC API to detect Server Name and Join Code
+        if (erlcApiKey) {
+          try {
+            const apiRes = await fetch('https://api.erlc.gg/v1/server', {
+              headers: { 'Server-Key': erlcApiKey }
+            });
+            if (apiRes.ok) {
+              const sData = await apiRes.json();
+              if (sData?.Name) {
+                updateBotCustomization(botId, 'serverName', sData.Name);
+              }
+              if (sData?.JoinKey) {
+                updateBotCustomization(botId, 'joinCode', sData.JoinKey);
+              }
+            }
+          } catch (e) {
+            console.warn('[ERLC AUTO-DETECT ERROR]:', e.message);
+          }
+        }
+
         startCustomerBot(botId).catch(err => {
           console.warn(`[CUSTOMER BOT] Error starting bot ${botId}:`, err.message);
         });
 
-        const payload = buildConfigPanelPayload(botId, 1);
+        const payload = buildConfigPanelPayload(botId, 1, false);
         return interaction.editReply(payload).catch(() => null);
       }
 
@@ -3172,12 +3576,14 @@ export async function handleInteraction(interaction) {
         const transcriptsChannelId = getVal('transcriptsChannelId');
         const ticketCategoryId = getVal('ticketCategoryId');
         const ticketPingRoleId = getVal('ticketPingRoleId');
+        const ticketClaimRoleId = getVal('ticketClaimRoleId');
 
         updateBotCustomization(botId, 'topBannerUrl', topBannerUrl);
         updateBotCustomization(botId, 'bottomBannerUrl', bottomBannerUrl);
         if (transcriptsChannelId) updateBotCustomization(botId, 'transcriptsChannelId', transcriptsChannelId);
         if (ticketCategoryId) updateBotCustomization(botId, 'ticketCategoryId', ticketCategoryId);
         if (ticketPingRoleId) updateBotCustomization(botId, 'ticketPingRoleId', ticketPingRoleId);
+        if (ticketClaimRoleId !== undefined) updateBotCustomization(botId, 'ticketClaimRoleId', ticketClaimRoleId);
 
         const payload = buildConfigPanelPayload(botId, 2);
         try {
@@ -3240,10 +3646,12 @@ export async function handleInteraction(interaction) {
         const botId = interaction.customId.replace('cfg_modal_sessionbanners_', '');
         const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
         const sessionTopBannerUrl = getVal('sessionTopBannerUrl');
+        const sessionVoteTopBannerUrl = getVal('sessionVoteTopBannerUrl');
         const sessionShutdownBannerUrl = getVal('sessionShutdownBannerUrl');
         const sessionBottomBannerUrl = getVal('sessionBottomBannerUrl');
 
         updateBotCustomization(botId, 'sessionTopBannerUrl', sessionTopBannerUrl);
+        if (sessionVoteTopBannerUrl !== undefined) updateBotCustomization(botId, 'sessionVoteTopBannerUrl', sessionVoteTopBannerUrl);
         updateBotCustomization(botId, 'sessionShutdownBannerUrl', sessionShutdownBannerUrl);
         updateBotCustomization(botId, 'sessionBottomBannerUrl', sessionBottomBannerUrl);
 
@@ -3283,7 +3691,8 @@ export async function handleInteraction(interaction) {
         const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
         const infractionsChannelId = getVal('infractionsChannelId');
         const infractionStaffRoleId = getVal('infractionStaffRoleId');
-        const infractBannerUrl = getVal('infractBannerUrl');
+        const infractBannerUrl = getVal('infractionsBannerUrl') || getVal('infractBannerUrl');
+        const infractionBottomBannerUrl = getVal('infractionBottomBannerUrl');
         const infractRemoveRoleId = getVal('infractRemoveRoleId');
         const infractGiveRoleId = getVal('infractGiveRoleId');
 
@@ -3293,6 +3702,7 @@ export async function handleInteraction(interaction) {
           updateBotCustomization(botId, 'infractBannerUrl', infractBannerUrl);
           updateBotCustomization(botId, 'infractionBannerUrl', infractBannerUrl);
         }
+        if (infractionBottomBannerUrl !== undefined) updateBotCustomization(botId, 'infractionBottomBannerUrl', infractionBottomBannerUrl);
         if (infractRemoveRoleId !== undefined) updateBotCustomization(botId, 'infractRemoveRoleId', infractRemoveRoleId);
         if (infractGiveRoleId !== undefined) updateBotCustomization(botId, 'infractGiveRoleId', infractGiveRoleId);
 
@@ -3310,7 +3720,8 @@ export async function handleInteraction(interaction) {
         const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
         const promotionsChannelId = getVal('promotionsChannelId');
         const promotionStaffRoleId = getVal('promotionStaffRoleId');
-        const promoteBannerUrl = getVal('promoteBannerUrl');
+        const promoteBannerUrl = getVal('promotionsBannerUrl') || getVal('promoteBannerUrl');
+        const promotionBottomBannerUrl = getVal('promotionBottomBannerUrl');
         const promotionGiveRoleId = getVal('promotionGiveRoleId');
 
         if (promotionsChannelId !== undefined) updateBotCustomization(botId, 'promotionsChannelId', promotionsChannelId);
@@ -3319,6 +3730,7 @@ export async function handleInteraction(interaction) {
           updateBotCustomization(botId, 'promoteBannerUrl', promoteBannerUrl);
           updateBotCustomization(botId, 'promotionBannerUrl', promoteBannerUrl);
         }
+        if (promotionBottomBannerUrl !== undefined) updateBotCustomization(botId, 'promotionBottomBannerUrl', promotionBottomBannerUrl);
         if (promotionGiveRoleId !== undefined) updateBotCustomization(botId, 'promotionGiveRoleId', promotionGiveRoleId);
 
         const payload = buildConfigPanelPayload(botId, 4);
@@ -3344,6 +3756,90 @@ export async function handleInteraction(interaction) {
         if (appDescription) updateBotCustomization(botId, 'appDescription', appDescription);
 
         const payload = buildConfigPanelPayload(botId, 5);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration In-Game Mod Questions Modal Submit (Page 5)
+      if (interaction.customId.startsWith('cfg_modal_appquestions_ingame_') || interaction.customId.startsWith('cfg_modal_appquiz_')) {
+        const botId = interaction.customId.replace('cfg_modal_appquestions_ingame_', '').replace('cfg_modal_appquiz_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const ingameQuestions = getVal('ingameQuestions') || getVal('appQuizIntroText');
+        if (ingameQuestions) updateBotCustomization(botId, 'ingameQuestions', ingameQuestions);
+
+        const payload = buildConfigPanelPayload(botId, 5);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Discord Mod Questions Modal Submit (Page 5)
+      if (interaction.customId.startsWith('cfg_modal_appquestions_discord_')) {
+        const botId = interaction.customId.replace('cfg_modal_appquestions_discord_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const discordQuestions = getVal('discordQuestions');
+        if (discordQuestions) updateBotCustomization(botId, 'discordQuestions', discordQuestions);
+
+        const payload = buildConfigPanelPayload(botId, 5);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Staff Docs Content & Layout Modal Submit (Page 6)
+      if (interaction.customId.startsWith('cfg_modal_docscontent_')) {
+        const botId = interaction.customId.replace('cfg_modal_docscontent_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const staffDocsTitle = getVal('staffDocsTitle');
+        const staffDocsDescription = getVal('staffDocsDescription');
+        const staffDocsLayout = getVal('staffDocsLayout');
+
+        if (staffDocsTitle) updateBotCustomization(botId, 'staffDocsTitle', staffDocsTitle);
+        if (staffDocsDescription) updateBotCustomization(botId, 'staffDocsDescription', staffDocsDescription);
+        if (staffDocsLayout) updateBotCustomization(botId, 'staffDocsLayout', staffDocsLayout);
+
+        const payload = buildConfigPanelPayload(botId, 6);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Staff Docs Banners Modal Submit (Page 6)
+      if (interaction.customId.startsWith('cfg_modal_docsbanners_')) {
+        const botId = interaction.customId.replace('cfg_modal_docsbanners_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const staffDocsTopBannerUrl = getVal('staffDocsTopBannerUrl');
+        const staffDocsBottomBannerUrl = getVal('staffDocsBottomBannerUrl');
+
+        updateBotCustomization(botId, 'staffDocsTopBannerUrl', staffDocsTopBannerUrl);
+        updateBotCustomization(botId, 'staffDocsBottomBannerUrl', staffDocsBottomBannerUrl);
+
+        const payload = buildConfigPanelPayload(botId, 6);
+        try {
+          return await interaction.update(payload);
+        } catch (err) {
+          return await interaction.editReply(payload).catch(() => null);
+        }
+      }
+
+      // Configuration Staff Role Modal Submit (Page 1)
+      if (interaction.customId.startsWith('cfg_modal_staffrole_')) {
+        const botId = interaction.customId.replace('cfg_modal_staffrole_', '');
+        const getVal = id => interaction.fields.fields.get(id)?.value?.trim() || '';
+        const botStaffRoleId = getVal('botStaffRoleId');
+
+        updateBotCustomization(botId, 'botStaffRoleId', botStaffRoleId);
+
+        const payload = buildConfigPanelPayload(botId, 1);
         try {
           return await interaction.update(payload);
         } catch (err) {
@@ -3582,44 +4078,16 @@ export async function handleInteraction(interaction) {
           }
         ];
 
-        // Add staff and category ping roles to overwrites
+        // Add staff, ticket claim, and category ping roles to overwrites
         const addedRoles = new Set();
 
         // 1. Specific category ping role (e.g. High Rank, General Support)
-        if (category.pingRoleId && interaction.guild.roles.cache.has(category.pingRoleId)) {
-          permissionOverwrites.push({
-            id: category.pingRoleId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory,
-              PermissionFlagsBits.AttachFiles,
-              PermissionFlagsBits.EmbedLinks
-            ]
-          });
-          addedRoles.add(category.pingRoleId);
-        }
-
-        // 2. Fallback ticket ping role from bot configuration
-        if (cust.ticketPingRoleId && interaction.guild.roles.cache.has(cust.ticketPingRoleId) && !addedRoles.has(cust.ticketPingRoleId)) {
-          permissionOverwrites.push({
-            id: cust.ticketPingRoleId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory,
-              PermissionFlagsBits.AttachFiles,
-              PermissionFlagsBits.EmbedLinks
-            ]
-          });
-          addedRoles.add(cust.ticketPingRoleId);
-        }
-
-        // 3. Fallback standard staff roles (only if present in the current guild)
-        for (const roleId of CONFIG.STAFF_ROLE_IDS) {
-          if (roleId && !roleId.includes('PASTE') && interaction.guild.roles.cache.has(roleId) && !addedRoles.has(roleId)) {
+        if (category.pingRoleId) {
+          const catRole = interaction.guild.roles.cache.get(category.pingRoleId) ||
+                          await interaction.guild.roles.fetch(category.pingRoleId).catch(() => null);
+          if (catRole) {
             permissionOverwrites.push({
-              id: roleId,
+              id: catRole.id,
               allow: [
                 PermissionFlagsBits.ViewChannel,
                 PermissionFlagsBits.SendMessages,
@@ -3628,7 +4096,85 @@ export async function handleInteraction(interaction) {
                 PermissionFlagsBits.EmbedLinks
               ]
             });
-            addedRoles.add(roleId);
+            addedRoles.add(catRole.id);
+          }
+        }
+
+        // 2. Specific ticket claim role configured by user
+        if (cust.ticketClaimRoleId && !addedRoles.has(cust.ticketClaimRoleId)) {
+          const claimRole = interaction.guild.roles.cache.get(cust.ticketClaimRoleId) ||
+                            await interaction.guild.roles.fetch(cust.ticketClaimRoleId).catch(() => null);
+          if (claimRole) {
+            permissionOverwrites.push({
+              id: claimRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.EmbedLinks
+              ]
+            });
+            addedRoles.add(claimRole.id);
+          }
+        }
+
+        // 3. Fallback ticket ping role from bot configuration
+        if (cust.ticketPingRoleId && !addedRoles.has(cust.ticketPingRoleId)) {
+          const tpRole = interaction.guild.roles.cache.get(cust.ticketPingRoleId) ||
+                         await interaction.guild.roles.fetch(cust.ticketPingRoleId).catch(() => null);
+          if (tpRole) {
+            permissionOverwrites.push({
+              id: tpRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.EmbedLinks
+              ]
+            });
+            addedRoles.add(tpRole.id);
+          }
+        }
+
+        // 4. Authorized bot staff role
+        if (cust.botStaffRoleId && !addedRoles.has(cust.botStaffRoleId)) {
+          const staffRole = interaction.guild.roles.cache.get(cust.botStaffRoleId) ||
+                            await interaction.guild.roles.fetch(cust.botStaffRoleId).catch(() => null);
+          if (staffRole) {
+            permissionOverwrites.push({
+              id: staffRole.id,
+              allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles,
+                PermissionFlagsBits.EmbedLinks
+              ]
+            });
+            addedRoles.add(staffRole.id);
+          }
+        }
+
+        // 5. Fallback standard staff roles (only if present in the current guild)
+        for (const roleId of CONFIG.STAFF_ROLE_IDS) {
+          if (roleId && !roleId.includes('PASTE') && !addedRoles.has(roleId)) {
+            const r = interaction.guild.roles.cache.get(roleId) ||
+                      await interaction.guild.roles.fetch(roleId).catch(() => null);
+            if (r) {
+              permissionOverwrites.push({
+                id: r.id,
+                allow: [
+                  PermissionFlagsBits.ViewChannel,
+                  PermissionFlagsBits.SendMessages,
+                  PermissionFlagsBits.ReadMessageHistory,
+                  PermissionFlagsBits.AttachFiles,
+                  PermissionFlagsBits.EmbedLinks
+                ]
+              });
+              addedRoles.add(r.id);
+            }
           }
         }
 
@@ -3645,8 +4191,11 @@ export async function handleInteraction(interaction) {
           if (cleanId) {
             const ch = interaction.guild.channels.cache.get(cleanId) || 
                        await interaction.guild.channels.fetch(cleanId).catch(() => null);
-            if (ch) {
+            if (ch && ch.type === ChannelType.GuildCategory) {
               parentCategoryId = ch.id;
+              break;
+            } else if (ch) {
+              parentCategoryId = ch.parentId || ch.id;
               break;
             }
           }
@@ -3705,11 +4254,18 @@ export async function handleInteraction(interaction) {
         });
       }
 
-      // Handle Close Ticket Modal (Staff only, required reason)
+      // Handle Close Ticket Modal (Staff, claim role, or author)
       if (interaction.customId === 'modal_close_ticket') {
-        if (!isStaff(interaction.member, interaction)) {
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+        const activeTicket = getActiveTicket(interaction.channelId);
+        const isAuthor = activeTicket?.authorId === interaction.user.id;
+        const hasClaimRole = cust.ticketClaimRoleId && interaction.member?.roles?.cache?.has(cust.ticketClaimRoleId);
+        const isStaffMember = isStaff(interaction.member, interaction);
+
+        if (!isAuthor && !hasClaimRole && !isStaffMember) {
           return interaction.reply({
-            content: 'Only staff members can close support tickets.',
+            content: 'Only staff members, authorized support roles, or the ticket author can close this ticket.',
             ephemeral: true
           });
         }
@@ -4019,17 +4575,70 @@ export async function handleInteraction(interaction) {
       }
     }
 
+    // Channel Select Menu Interaction (Panel Menu channel picker)
+    if (interaction.isChannelSelectMenu()) {
+      if (interaction.customId.startsWith('panel_menu_chan_pick_')) {
+        const pickedChannelId = interaction.values[0];
+        const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
+        const updatedPayload = buildPanelMenuPayload({
+          targetChannelId: pickedChannelId,
+          statusMessage: `Target destination updated to <#${pickedChannelId}>.`,
+          statusType: 'info',
+          includeAttachment: false,
+          customizations: botInst?.customizations
+        });
+        return interaction.update(updatedPayload).catch(() => null);
+      }
+    }
+
     /* ---------------------------------------------------------------------- */
     /* 4. BUTTON INTERACTIONS                                                 */
     /* ---------------------------------------------------------------------- */
     if (interaction.isButton()) {
-      // Config Navigation Buttons
+      // Open Panel Menu from /config
+      if (interaction.customId.startsWith('cfg_btn_open_panel_menu_')) {
+        const botId = interaction.customId.replace('cfg_btn_open_panel_menu_', '');
+        const bot = getBotInstance(botId);
+        const payload = buildPanelMenuPayload({
+          targetChannelId: interaction.channelId,
+          includeAttachment: false,
+          customizations: bot?.customizations
+        });
+        return interaction.update(payload).catch(async () => {
+          return interaction.reply({ ...payload, flags: 64 }).catch(() => null);
+        });
+      }
+
+      // Panel Menu Buttons
+      if (interaction.customId === 'panel_menu_btn_config') {
+        const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
+        const botId = botInst ? botInst.botId : MASTER_BOT_ID;
+        const payload = buildConfigPanelPayload(botId, 1, false);
+        return interaction.update(payload).catch(async () => {
+          return interaction.reply({ ...payload, flags: 64 }).catch(() => null);
+        });
+      }
+
+      if (interaction.customId.startsWith('panel_menu_btn_refresh_')) {
+        const chanIdRaw = interaction.customId.replace('panel_menu_btn_refresh_', '');
+        const botInst = getBotInstanceForGuild(interaction.guild?.id, interaction.user.id);
+        const payload = buildPanelMenuPayload({
+          targetChannelId: chanIdRaw !== 'current' ? chanIdRaw : interaction.channelId,
+          statusMessage: 'Panel Menu refreshed.',
+          statusType: 'info',
+          includeAttachment: false,
+          customizations: botInst?.customizations
+        });
+        return interaction.update(payload).catch(() => null);
+      }
+
+      // Config Navigation Buttons (Zero-lag pagination — no file re-upload)
       if (interaction.customId.startsWith('cfg_nav_prev_')) {
         const parts = interaction.customId.replace('cfg_nav_prev_', '').split('_');
         const botId = parts[0];
         const curPage = parseInt(parts[1], 10) || 1;
         const targetPage = Math.max(1, curPage - 1);
-        const payload = buildConfigPanelPayload(botId, targetPage);
+        const payload = buildConfigPanelPayload(botId, targetPage, false);
         try {
           return await interaction.update(payload);
         } catch (err) {
@@ -4043,7 +4652,7 @@ export async function handleInteraction(interaction) {
         const botId = parts[0];
         const curPage = parseInt(parts[1], 10) || 1;
         const targetPage = Math.min(TOTAL_PAGES, curPage + 1);
-        const payload = buildConfigPanelPayload(botId, targetPage);
+        const payload = buildConfigPanelPayload(botId, targetPage, false);
         try {
           return await interaction.update(payload);
         } catch (err) {
@@ -4056,7 +4665,7 @@ export async function handleInteraction(interaction) {
         const parts = interaction.customId.replace('cfg_nav_refresh_', '').split('_');
         const botId = parts[0];
         const curPage = parseInt(parts[1], 10) || 1;
-        const payload = buildConfigPanelPayload(botId, curPage);
+        const payload = buildConfigPanelPayload(botId, curPage, false);
         try {
           return await interaction.update(payload);
         } catch (err) {
@@ -4186,31 +4795,10 @@ export async function handleInteraction(interaction) {
       }
 
       // Page 6: Server Documentation & Policies
-      if (interaction.customId.startsWith('cfg_btn_docs_')) {
-        const botId = interaction.customId.replace('cfg_btn_docs_', '');
+      if (interaction.customId.startsWith('cfg_btn_docs_') || interaction.customId.startsWith('cfg_btn_staffdocs_')) {
+        const botId = interaction.customId.replace('cfg_btn_docs_', '').replace('cfg_btn_staffdocs_', '');
         return interaction.showModal(buildDocsModal(botId)).catch(err => {
           console.warn(`[CONFIG MODAL] showModal error (docs):`, err.message);
-        });
-      }
-
-      // Page 7: Welcome System
-      if (interaction.customId.startsWith('cfg_btn_togglewelcome_')) {
-        const botId = interaction.customId.replace('cfg_btn_togglewelcome_', '');
-        const bot = getBotInstance(botId);
-        const curStatus = Boolean(bot?.customizations?.welcomeEnabled);
-        updateBotCustomization(botId, 'welcomeEnabled', !curStatus);
-        const payload = buildConfigPanelPayload(botId, 7);
-        try {
-          return await interaction.update(payload);
-        } catch (err) {
-          return await interaction.editReply(payload).catch(() => null);
-        }
-      }
-
-      if (interaction.customId.startsWith('cfg_btn_welcome_')) {
-        const botId = interaction.customId.replace('cfg_btn_welcome_', '');
-        return interaction.showModal(buildWelcomeModal(botId)).catch(err => {
-          console.warn(`[CONFIG MODAL] showModal error (welcome):`, err.message);
         });
       }
 
@@ -4222,10 +4810,27 @@ export async function handleInteraction(interaction) {
         });
       }
 
-      if (interaction.customId.startsWith('cfg_btn_askai_') || interaction.customId.startsWith('cfg_btn_ai_modal_')) {
-        const botId = interaction.customId.replace('cfg_btn_askai_', '').replace('cfg_btn_ai_modal_', '');
+      if (interaction.customId.startsWith('cfg_btn_askai_') || interaction.customId.startsWith('cfg_btn_ai_modal_') || interaction.customId.startsWith('cfg_btn_ai_helper_')) {
+        const botId = interaction.customId.replace('cfg_btn_askai_', '').replace('cfg_btn_ai_modal_', '').replace('cfg_btn_ai_helper_', '');
         return interaction.showModal(buildAskAiModal(botId)).catch(err => {
           console.warn(`[CONFIG MODAL] showModal error (askai):`, err.message);
+        });
+      }
+
+      if (interaction.customId.startsWith('cfg_btn_staffrole_')) {
+        const botId = interaction.customId.replace('cfg_btn_staffrole_', '');
+        return interaction.showModal(buildStaffRoleModal(botId)).catch(err => {
+          console.warn(`[CONFIG MODAL] showModal error (staffrole):`, err.message);
+        });
+      }
+
+      // Staff Documentation Button Click (for button layout)
+      if (interaction.customId.startsWith('staffdoc_btn_')) {
+        const sectionId = interaction.customId.replace('staffdoc_btn_', '');
+        const sectionPayload = buildStaffDocSectionPayload(sectionId);
+        return interaction.reply({
+          ...sectionPayload,
+          flags: 64
         });
       }
 
@@ -4942,7 +5547,7 @@ export async function handleInteraction(interaction) {
               const fallbackEmbed = new EmbedBuilder()
                 .setColor(0x38BDF8)
                 .setImage(CONFIG.SESSION.VOTE_TOP_BANNER_URL)
-                .setTitle('Session Vote Completed — Action Required')
+                .setTitle('Session Vote Completed | Action Required')
                 .setDescription(
                   `> The session vote in **ERLCX** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n\n` +
                   `Choose an action below to proceed with the session startup:`
@@ -5005,7 +5610,8 @@ export async function handleInteraction(interaction) {
           const voteChannel = await interaction.client.channels.fetch(vote.channelId).catch(() => null);
           if (voteChannel) {
             const voterPings = vote.voters.map(id => `<@${id}>`).join(' ');
-            const joinCode = CONFIG.SESSION.DEFAULT_JOIN_CODE || 'olrpp';
+            const botInst = getBotInstanceForGuild(interaction.guild?.id);
+            const joinCode = botInst?.customizations?.joinCode || CONFIG.SESSION.DEFAULT_JOIN_CODE || '';
             const joinUrl = `https://policeroleplay.community/join?code=${encodeURIComponent(joinCode)}`;
 
             const joinRow = new ActionRowBuilder().addComponents(
@@ -5130,22 +5736,24 @@ export async function handleInteraction(interaction) {
           giveaway.entries = Array.isArray(giveaway.entries) ? giveaway.entries : [];
           const userId = interaction.user.id;
           const entryIndex = giveaway.entries.indexOf(userId);
-          let feedback = '';
 
-          if (entryIndex === -1) {
-            giveaway.entries.push(userId);
-            feedback = `${GIVEAWAY_EMOJI} You have successfully entered the giveaway for **${giveaway.prize}**! (${giveaway.entries.length} total entries)`;
-          } else {
-            giveaway.entries.splice(entryIndex, 1);
-            feedback = `Your entry for **${giveaway.prize}** has been withdrawn. (${giveaway.entries.length} total entries)`;
+          if (entryIndex !== -1) {
+            const alreadyMsg = `${GIVEAWAY_EMOJI} You are already entered in the giveaway for **${giveaway.prize}**! (${giveaway.entries.length} total entries)`;
+            if (!interaction.replied && !interaction.deferred) {
+              return await interaction.reply({ content: alreadyMsg, flags: 64 }).catch(() => null);
+            } else {
+              return await interaction.followUp({ content: alreadyMsg, flags: 64 }).catch(() => null);
+            }
           }
 
+          giveaway.entries.push(userId);
           saveGiveaway(giveaway);
+          const feedback = `${GIVEAWAY_EMOJI} You have successfully entered the giveaway for **${giveaway.prize}**! (${giveaway.entries.length} total entries)`;
 
           if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: feedback, ephemeral: true }).catch(() => null);
+            await interaction.reply({ content: feedback, flags: 64 }).catch(() => null);
           } else {
-            await interaction.followUp({ content: feedback, ephemeral: true }).catch(() => null);
+            await interaction.followUp({ content: feedback, flags: 64 }).catch(() => null);
           }
 
           // Update giveaway card in channel
@@ -5307,9 +5915,16 @@ export async function handleInteraction(interaction) {
             ephemeral: true
           });
         }
-        if (!isStaff(interaction.member, interaction)) {
+
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+        const canClaim = isStaff(interaction.member, interaction) || (cust.ticketClaimRoleId && interaction.member?.roles?.cache?.has(cust.ticketClaimRoleId));
+
+        if (!canClaim) {
           return interaction.reply({
-            content: 'Only staff members can claim tickets.',
+            content: cust.ticketClaimRoleId
+              ? `Only members with the <@&${cust.ticketClaimRoleId}> role or staff can claim tickets.`
+              : 'Only staff members can claim tickets.',
             ephemeral: true
           });
         }
@@ -5317,9 +5932,6 @@ export async function handleInteraction(interaction) {
         activeTicket.claimedBy = interaction.user.id;
         activeTicket.claimedTag = interaction.user.tag;
         saveActiveTicket(interaction.channel.id, activeTicket);
-
-        const botInst = getBotForInteraction(interaction);
-        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
 
         const updatedControl = buildTicketControl(activeTicket, cust);
         await interaction.update(updatedControl);
@@ -5341,9 +5953,14 @@ export async function handleInteraction(interaction) {
             ephemeral: true
           });
         }
-        if (!isStaff(interaction.member, interaction)) {
+
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+        const canClaim = isStaff(interaction.member, interaction) || (cust.ticketClaimRoleId && interaction.member?.roles?.cache?.has(cust.ticketClaimRoleId));
+
+        if (!canClaim) {
           return interaction.reply({
-            content: 'Only staff members can unclaim tickets.',
+            content: 'Only staff members or authorized claim roles can unclaim tickets.',
             ephemeral: true
           });
         }
@@ -5359,9 +5976,6 @@ export async function handleInteraction(interaction) {
         activeTicket.claimedTag = null;
         saveActiveTicket(interaction.channel.id, activeTicket);
 
-        const botInst = getBotForInteraction(interaction);
-        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
-
         const updatedControl = buildTicketControl(activeTicket, cust);
         await interaction.update(updatedControl);
 
@@ -5374,11 +5988,17 @@ export async function handleInteraction(interaction) {
         return;
       }
 
-      // Close Request Button (Staff only with mandatory reason modal)
+      // Close Request Button (Staff, claim role, or author)
       if (interaction.customId === 'ticket_close_request') {
-        if (!isStaff(interaction.member, interaction)) {
+        const botInst = getBotForInteraction(interaction);
+        const cust = botInst?.customizations || DEFAULT_CUSTOMIZATIONS;
+        const isAuthor = activeTicket?.authorId === interaction.user.id;
+        const hasClaimRole = cust.ticketClaimRoleId && interaction.member?.roles?.cache?.has(cust.ticketClaimRoleId);
+        const isStaffMember = isStaff(interaction.member, interaction);
+
+        if (!isAuthor && !hasClaimRole && !isStaffMember) {
           return interaction.reply({
-            content: 'Only staff members can close support tickets.',
+            content: 'Only staff members, authorized support roles, or the ticket author can close this ticket.',
             ephemeral: true
           });
         }
@@ -5392,6 +6012,7 @@ export async function handleInteraction(interaction) {
           .setLabel('Reason for Closing')
           .setStyle(TextInputStyle.Paragraph)
           .setPlaceholder('Enter the resolution or reason for closing this ticket...')
+          .setValue(isAuthor ? 'Inquiry resolved by user' : '')
           .setMinLength(3)
           .setMaxLength(1000)
           .setRequired(true);

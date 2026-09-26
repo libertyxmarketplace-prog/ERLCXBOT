@@ -33,6 +33,7 @@ export function buildStaffDocsHubPayload(customConfig = null) {
   const files = [];
   let topBannerUrl = customConfig?.staffDocsTopBannerUrl?.trim() || null;
   let bottomBannerUrl = customConfig?.staffDocsBottomBannerUrl?.trim() || null;
+  const srvName = customConfig?.serverName || 'Staff';
 
   const containerComponents = [];
 
@@ -49,54 +50,99 @@ export function buildStaffDocsHubPayload(customConfig = null) {
     });
   }
 
+  const hubTitle = customConfig?.staffDocsTitle?.trim() || `${srvName} | Staff Documentation`;
+  const hubDesc = customConfig?.staffDocsDescription?.trim() || [
+    `> Welcome to the official Staff Documentation directory.`,
+    `> Holding a staff position is a privilege that demands impartiality, professionalism, and accountability at all times. As a staff member, your conduct represents the standard of the entire community.`,
+    ``,
+    `### Directory Overview`,
+    `> • General Staff Regulations & Code of Conduct`,
+    `> • In-Game & Discord Moderation Standard Operating Procedures (SOP)`,
+    `> • Progressive Disciplinary System & Strike Matrix`,
+    `> • Official In-Game & Administrative Command Directory`,
+    ``,
+    `### Select a Document`,
+    `> Choose a document below to review the corresponding operational policy.`
+  ].join('\n');
+
   containerComponents.push({
     type: 10,
-    content:
-      `## ERLCX | Staff Documentation\n` +
-      `> Welcome to the official ERLCX Staff Documentation directory.\n` +
-      `> Holding a staff position is a privilege that demands impartiality, professionalism, and accountability at all times. As a staff member, your conduct represents the standard of the entire community.\n\n` +
-      `### Directory Overview\n` +
-      `> • General Staff Regulations & Code of Conduct\n` +
-      `> • In-Game & Discord Moderation Standard Operating Procedures (SOP)\n` +
-      `> • Progressive Disciplinary System & Strike Matrix\n` +
-      `> • Official In-Game & Administrative Command Directory\n\n` +
-      `### Select a Document\n` +
-      `> Choose a category from the dropdown menu below to review the corresponding operational policy.`
+    content: `## ${hubTitle}\n${hubDesc}`
   });
 
-  // String Select Menu (strictly zero emojis)
-  containerComponents.push({
-    type: 1,
-    components: [
-      {
-        type: 3,
-        custom_id: 'staffdoc_select_category',
-        placeholder: 'Select a Staff Operational Manual...',
-        options: [
-          {
-            label: 'General Staff Regulations & Conduct',
-            value: 'general_regulations',
-            description: 'Core responsibilities, activity expectations, integrity, and anti-abuse policies.'
-          },
-          {
-            label: 'In-Game & Moderation SOP',
-            value: 'moderation_sop',
-            description: 'Mod call response protocol, freezing scenes, evidence standards, and ticket duties.'
-          },
-          {
-            label: 'Strike Matrix & Disciplinary Policy',
-            value: 'strike_matrix',
-            description: 'Staff accountability, warning levels, strike penalties, and expiration timelines.'
-          },
-          {
-            label: 'In-Game Moderation Command Directory',
-            value: 'staff_commands',
-            description: 'Authorized ER:LC server commands, syntax, and proper administrative usage.'
-          }
-        ]
-      }
-    ]
-  });
+  const layoutMode = customConfig?.staffDocsLayout || 'select';
+
+  if (layoutMode === 'buttons') {
+    // Buttons layout (2 rows of buttons)
+    containerComponents.push({
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 2,
+          label: 'General Staff Regulations',
+          custom_id: 'staffdoc_btn_general_regulations'
+        },
+        {
+          type: 2,
+          style: 2,
+          label: 'Moderation SOP',
+          custom_id: 'staffdoc_btn_moderation_sop'
+        }
+      ]
+    });
+    containerComponents.push({
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 2,
+          label: 'Strike Matrix & Disciplinary Policy',
+          custom_id: 'staffdoc_btn_strike_matrix'
+        },
+        {
+          type: 2,
+          style: 2,
+          label: 'Moderation Command Directory',
+          custom_id: 'staffdoc_btn_staff_commands'
+        }
+      ]
+    });
+  } else {
+    // String Select Menu (strictly zero emojis)
+    containerComponents.push({
+      type: 1,
+      components: [
+        {
+          type: 3,
+          custom_id: 'staffdoc_select_category',
+          placeholder: 'Select a Staff Operational Manual...',
+          options: [
+            {
+              label: 'General Staff Regulations & Conduct',
+              value: 'general_regulations',
+              description: 'Core responsibilities, activity expectations, integrity, and anti-abuse policies.'
+            },
+            {
+              label: 'In-Game & Moderation SOP',
+              value: 'moderation_sop',
+              description: 'Mod call response protocol, freezing scenes, evidence standards, and ticket duties.'
+            },
+            {
+              label: 'Strike Matrix & Disciplinary Policy',
+              value: 'strike_matrix',
+              description: 'Staff accountability, warning levels, strike penalties, and expiration timelines.'
+            },
+            {
+              label: 'In-Game Moderation Command Directory',
+              value: 'staff_commands',
+              description: 'Authorized ER:LC server commands, syntax, and proper administrative usage.'
+            }
+          ]
+        }
+      ]
+    });
+  }
 
   if (bottomBannerUrl) {
     containerComponents.push({
@@ -136,7 +182,7 @@ export function buildStaffDocSectionPayload(sectionId) {
 
   let contentText = '';
 
-  if (sectionId === 'staff_regulations') {
+  if (sectionId === 'staff_regulations' || sectionId === 'general_regulations') {
     contentText =
       `## ERLCX | Staff Regulations & Code of Conduct\n` +
       `> Section I: Core Directives & Professional Expectations\n\n` +
@@ -189,16 +235,16 @@ export function buildStaffDocSectionPayload(sectionId) {
       `## ERLCX | Administrative Command Directory\n` +
       `> Section IV: In-Game ER:LC & Discord Syntax Guide\n\n` +
       `### In-Game ER:LC Commands\n` +
-      `> • \`:to [player]\` — Teleports staff member directly to target player.\n` +
-      `> • \`:bring [player]\` — Teleports player to staff member's location.\n` +
-      `> • \`:freeze [player]\` — Locks player avatar position during active dispute resolution.\n` +
-      `> • \`:thaw [player]\` — Unlocks player movement following call resolution.\n` +
-      `> • \`:respawn [player]\` — Respawns player avatar to resolve glitching or physics bugs.\n` +
-      `> • \`:jail [player] [time] [reason]\` — Places disruptive user in administrative confinement.\n` +
-      `> • \`:kick [player] [reason]\` — Removes disruptive user from the current live session.\n` +
-      `> • \`:ban [player] [time] [reason]\` — Issues temporary or permanent server blacklist.\n` +
-      `> • \`:m [message]\` — Broadcasts server-wide administrative announcement.\n` +
-      `> • \`:pm [player] [message]\` — Sends private administrative directive to player.\n\n` +
+      `> • \`:to [player]\` - Teleports staff member directly to target player.\n` +
+      `> • \`:bring [player]\` - Teleports player to staff member's location.\n` +
+      `> • \`:freeze [player]\` - Locks player avatar position during active dispute resolution.\n` +
+      `> • \`:thaw [player]\` - Unlocks player movement following call resolution.\n` +
+      `> • \`:respawn [player]\` - Respawns player avatar to resolve glitching or physics bugs.\n` +
+      `> • \`:jail [player] [time] [reason]\` - Places disruptive user in administrative confinement.\n` +
+      `> • \`:kick [player] [reason]\` - Removes disruptive user from the current live session.\n` +
+      `> • \`:ban [player] [time] [reason]\` - Issues temporary or permanent server blacklist.\n` +
+      `> • \`:m [message]\` - Broadcasts server-wide administrative announcement.\n` +
+      `> • \`:pm [player] [message]\` - Sends private administrative directive to player.\n\n` +
       `### Usage Guidelines\n` +
       `> Broadcast commands (\`:m\`) must only be utilized for critical server operations such as session starts, priority cooldowns, and server shutdowns.\n\n` +
       `-# ERLCX Staff Administration • Command Directory`;

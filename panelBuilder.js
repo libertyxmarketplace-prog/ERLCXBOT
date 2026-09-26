@@ -48,22 +48,31 @@ export function buildTicketPanel(deskData = null, customConfig = null) {
     content: `## ${panelTitle}\n${panelDesc}`
   });
 
-  // 3. Section with Blue Rules Button touching the far right wall
-  containerComponents.push({
-    type: 9,
-    components: [
-      {
-        type: 10,
-        content: '**Please review ticket guidelines before opening.**'
+  // 3. Section with Rules Button (only if enabled and has configured content)
+  const hasRules = customConfig?.showRulesButton !== false &&
+    Boolean(
+      (customConfig?.rulesTitle && customConfig.rulesTitle.trim()) ||
+      (customConfig?.rulesDescription && customConfig.rulesDescription.trim()) ||
+      (customConfig?.ticketRules && customConfig.ticketRules.trim())
+    );
+
+  if (hasRules) {
+    containerComponents.push({
+      type: 9,
+      components: [
+        {
+          type: 10,
+          content: customConfig?.rulesNoticeText || '**Please review ticket guidelines before opening.**'
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: customConfig?.rulesButtonStyle || 1, // Primary (Blue!)
+        label: customConfig?.rulesButtonLabel || 'Rules',
+        custom_id: 'ticket_btn_rules'
       }
-    ],
-    accessory: {
-      type: 2,
-      style: 1, // Primary (Blue!)
-      label: 'Rules',
-      custom_id: 'ticket_btn_rules'
-    }
-  });
+    });
+  }
 
   // 4. Action Row with dynamic category buttons (no emojis)
   const defaultCats = [
@@ -497,47 +506,58 @@ export function buildTranscriptLogEmbed({
 /**
  * Builds the official Welcome message and member count display button.
  */
-export function buildWelcomePayload(member) {
+export function buildWelcomePayload(member, customConfig = null) {
   const guild = member.guild;
   const memberCount = guild?.memberCount || 1;
-  const serverName = guild?.name || CONFIG.WELCOME.SERVER_NAME || 'ERLCX';
+  const serverName = customConfig?.serverName || guild?.name || CONFIG.WELCOME.SERVER_NAME || 'our community';
+  const bannerUrl = customConfig?.welcomeBannerUrl || null;
+  const rawText = customConfig?.welcomeText || "Welcome to {server}, {user}! Please check the rules and enjoy your stay.";
+  const formattedText = rawText
+    .replace(/{user}/g, `<@${member.id}>`)
+    .replace(/{username}/g, member.user?.username || '')
+    .replace(/{server}/g, serverName)
+    .replace(/{count}/g, memberCount.toLocaleString());
 
-  // Determine navigate channel ID
-  let navChannelId = CONFIG.WELCOME.NAVIGATE_CHANNEL_ID;
-  if (guild && !guild.channels.cache.has(navChannelId)) {
-    const navCh = guild.channels.cache.find(c =>
-      c.isTextBased() && (c.name.includes('regulation') || c.name.includes('rules') || c.name.includes('info'))
-    );
-    if (navCh) navChannelId = navCh.id;
+  const containerComponents = [];
+
+  if (bannerUrl && bannerUrl.trim() !== '') {
+    containerComponents.push({
+      type: 12,
+      items: [{ media: { url: bannerUrl.trim() } }]
+    });
   }
 
-  // Determine welcome emoji
-  let welcomeEmoji = CONFIG.WELCOME.WELCOME_EMOJI;
-  if (guild?.id !== '1541210827967823955' && !guild?.emojis.cache.has('1548529700731752478')) {
-    welcomeEmoji = '👋';
-  }
+  containerComponents.push({
+    type: 10,
+    content: [
+      `# Welcome to ${serverName}`,
+      `> ${formattedText}`,
+      ``,
+      `*You are member **#${memberCount.toLocaleString()}**.*`
+    ].join('\n')
+  });
 
-  const content = navChannelId
-    ? `${welcomeEmoji} Welcome to ${serverName}, <@${member.id}>. Navigate the server through <#${navChannelId}>`
-    : `${welcomeEmoji} Welcome to ${serverName}, <@${member.id}>!`;
-
-  const memberBtn = new ButtonBuilder()
-    .setCustomId('welcome_member_count')
-    .setStyle(ButtonStyle.Secondary)
-    .setLabel(`${memberCount.toLocaleString()} Members`)
-    .setDisabled(true);
-
-  if (guild?.id === '1541210827967823955' || guild?.emojis.cache.has(CONFIG.WELCOME.PEOPLE_EMOJI_ID)) {
-    memberBtn.setEmoji({ id: CONFIG.WELCOME.PEOPLE_EMOJI_ID, name: CONFIG.WELCOME.PEOPLE_EMOJI_NAME });
-  } else {
-    memberBtn.setEmoji('👥');
-  }
-
-  const row = new ActionRowBuilder().addComponents(memberBtn);
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        label: `${memberCount.toLocaleString()} Members`,
+        disabled: true,
+        custom_id: 'welcome_member_count_pill'
+      }
+    ]
+  });
 
   return {
-    content,
-    components: [row]
+    flags: 32768,
+    components: [
+      {
+        type: 17,
+        components: containerComponents
+      }
+    ]
   };
 }
 
@@ -639,19 +659,29 @@ export function getCommandMention(client, name, subcommand = '', guildId = null)
  * Builds the remodeled /commands directory with clickable blue slash command pills,
  * bottom banner image, and clean gray arrow pagination.
  */
-export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) {
+export function buildCommandsDirectoryPayload(client, page = 0, guildOrId = null) {
   const totalPages = 5;
   const safePage = Math.max(0, Math.min(totalPages - 1, page));
 
   const leftEmojiId = CONFIG.APPLICATIONS?.ARROW_LEFT_EMOJI_ID || '1550446757396348958';
   const rightEmojiId = CONFIG.APPLICATIONS?.ARROW_RIGHT_EMOJI_ID || '1550446417376448593';
 
+  let guild = null;
+  if (guildOrId && typeof guildOrId === 'object') {
+    guild = guildOrId;
+  } else if (guildOrId && typeof guildOrId === 'string') {
+    guild = client?.guilds?.cache?.get(guildOrId) || null;
+  }
+  const guildId = guild?.id || (typeof guildOrId === 'string' ? guildOrId : null);
+  const serverName = guild?.name || 'Server';
+  const serverIcon = guild?.iconURL?.({ size: 128 }) || null;
+
   const categoryTitles = [
     'Support Desk & Ticket Operations',
     'ER:LC Live Sessions & Announcements',
     'Community Giveaways & Applications',
     'Staff Administration & Governance',
-    'Voice Channel Music & System Utilities'
+    'Voice Channel Music & Media Utilities'
   ];
 
   let pageContent = '';
@@ -659,28 +689,27 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
   if (safePage === 0) {
     pageContent = [
       `### Support Desk & Moderation`,
-      getCommandMention(client, 'ticket', 'panel', guildId),
-      getCommandMention(client, 'ticket', 'status', guildId),
-      getCommandMention(client, 'ticket', 'category', guildId),
+      getCommandMention(client, 'panel', '', guildId),
+      getCommandMention(client, 'purge', '', guildId),
+      getCommandMention(client, 'say', '', guildId),
       getCommandMention(client, 'ticket', 'close', guildId),
       getCommandMention(client, 'ticket', 'claim', guildId),
       getCommandMention(client, 'ticket', 'unclaim', guildId),
       getCommandMention(client, 'ticket', 'add', guildId),
       getCommandMention(client, 'ticket', 'remove', guildId),
       getCommandMention(client, 'ticket', 'rename', guildId),
-      getCommandMention(client, 'purge', '', guildId),
-      getCommandMention(client, 'say', '', guildId),
+      getCommandMention(client, 'ticket', 'status', guildId),
       '',
       `**Prefix Shortcuts**`,
-      `\`-close [reason]\`  \`-open\``
+      `\`-close [reason]\`  \`-open\`  \`-claim\`  \`-unclaim\`  \`-purge [1-100]\``
     ].join('\n');
   } else if (safePage === 1) {
     pageContent = [
       `### ER:LC Live Sessions`,
-      getCommandMention(client, 'session', 'panel', guildId),
+      getCommandMention(client, 'panel', '', guildId),
+      getCommandMention(client, 'session', 'start', guildId),
       getCommandMention(client, 'session', 'vote', guildId),
       getCommandMention(client, 'session', 'shutdown', guildId),
-      getCommandMention(client, 'session', 'info', guildId),
       '',
       `**Prefix Shortcuts**`,
       `\`-startup [code] [vc]\`  \`-shutdown\`  \`-cancel\`  \`-delay <time>\`  \`-setcode <code>\``
@@ -688,11 +717,12 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
   } else if (safePage === 2) {
     pageContent = [
       `### Giveaways & Applications`,
+      getCommandMention(client, 'panel', '', guildId),
       getCommandMention(client, 'giveaway', 'start', guildId),
       getCommandMention(client, 'giveaway', 'end', guildId),
       getCommandMention(client, 'giveaway', 'reroll', guildId),
-      getCommandMention(client, 'application', 'panel', guildId),
       getCommandMention(client, 'application', 'setreview', guildId),
+      getCommandMention(client, 'application', 'setresults', guildId),
       '',
       `**Prefix Shortcuts**`,
       `\`-gstart <time> <winners> <prize>\`  \`-gend\`  \`-greroll\``
@@ -700,44 +730,46 @@ export function buildCommandsDirectoryPayload(client, page = 0, guildId = null) 
   } else if (safePage === 3) {
     pageContent = [
       `### Staff Administration & Governance`,
-      getCommandMention(client, 'staffdocs', 'panel', guildId),
+      getCommandMention(client, 'panel', '', guildId),
       getCommandMention(client, 'promote', '', guildId),
       getCommandMention(client, 'infract', '', guildId),
       getCommandMention(client, 'loa', 'request', guildId),
-      getCommandMention(client, 'department', 'panel', guildId),
-      getCommandMention(client, 'welcome', 'test', guildId),
       '',
       `**Staff Prefix Shortcuts**`,
-      `\`-staffdocs\`  \`-promote @user <role/rank> | [reason]\``,
+      `\`-promote @user <role/rank> | [reason]\``,
       `\`-infract @user <type> | <reason> | [proof]\``,
-      `\`-loa <duration or date> | <reason>\`  \`-welcome [on/off]\``
+      `\`-loa <duration or date> | <reason>\``
     ].join('\n');
   } else if (safePage === 4) {
     pageContent = [
       `### Voice Music & Utilities`,
       getCommandMention(client, 'commands', '', guildId),
-      getCommandMention(client, 'refont', '', guildId),
       getCommandMention(client, 'media', '', guildId),
       '',
       `**Music Prefix Commands**`,
       `\`-join\`  \`-play <query>\`  \`-volume <1-100>\``,
       `\`-pause\`  \`-unpause\` / \`-resume\`  \`-replay\`  \`-loop\`  \`-leave\``,
       '',
-      `**Utility & Media Shortcuts**`,
-      `\`-refont <text>\`  \`-media [caption]\``
+      `**Utility Shortcuts**`,
+      `\`-media [caption]\``
     ].join('\n');
   }
 
   const embed = new EmbedBuilder()
     .setColor(0x2B6CB0)
-    .setTitle('ERLCX — Command Directory')
+    .setAuthor({
+      name: `${serverName} Command Directory`,
+      iconURL: serverIcon || undefined
+    })
+    .setTitle(`${serverName} | Command Directory`)
     .setDescription(
       `> **Section ${safePage + 1} of ${totalPages}** | **${categoryTitles[safePage]}**\n` +
       `> Click any command tag below to execute directly in Discord.\n\n` +
       pageContent
     )
     .setFooter({
-      text: `ERLCX Systems | Page ${safePage + 1} of ${totalPages}`
+      text: `${serverName} Systems | Page ${safePage + 1} of ${totalPages}`,
+      iconURL: serverIcon || undefined
     });
 
   const bannerPath = './assets/bottom-banner.png';

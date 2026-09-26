@@ -11,25 +11,25 @@ if (!DISCORD_TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
+export const panelCommand = new SlashCommandBuilder()
+  .setName('panel')
+  .setDescription('Open the unified ERLCX V2 Panel Menu to deploy server panels')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addChannelOption(opt =>
+    opt
+      .setName('channel')
+      .setDescription('Channel to dispatch panels to (defaults to current channel)')
+      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+      .setRequired(false)
+  );
+
 const commands = [
+  panelCommand,
   new SlashCommandBuilder()
     .setName('ticket')
     .setDescription('ERLCX Ticket System management commands')
     .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages)
-    // 1. /ticket panel [channel]
-    .addSubcommand(sub =>
-      sub
-        .setName('panel')
-        .setDescription('Send the main ticket panel to a channel')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel to post the ticket panel into (defaults to current channel)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false)
-        )
-    )
-    // 2. /ticket close [reason]
+    // 1. /ticket close [reason]
     .addSubcommand(sub =>
       sub
         .setName('close')
@@ -154,16 +154,22 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('session')
-    .setDescription('ERLCX ER:LC Session commands')
+    .setDescription('ER:LC Session operations and status management')
     .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages)
     .addSubcommand(sub =>
       sub
-        .setName('panel')
-        .setDescription('Send the live ER:LC Session Information panel to a channel')
+        .setName('start')
+        .setDescription('Announce the startup of a session')
+        .addStringOption(opt =>
+          opt
+            .setName('code')
+            .setDescription('Server join code (defaults to configured code)')
+            .setRequired(false)
+        )
         .addChannelOption(opt =>
           opt
             .setName('channel')
-            .setDescription('Channel to post the session panel into (defaults to current channel)')
+            .setDescription('Channel to post the startup announcement into')
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(false)
         )
@@ -171,7 +177,7 @@ const commands = [
     .addSubcommand(sub =>
       sub
         .setName('vote')
-        .setDescription('Start an official ERLCX ER:LC Session Vote')
+        .setDescription('Start an official ER:LC Session Vote')
         .addIntegerOption(opt =>
           opt
             .setName('required')
@@ -328,18 +334,6 @@ const commands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
-        .setName('panel')
-        .setDescription('Send the official staff application panel')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel to send application panel into (defaults to current)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false)
-        )
-    )
-    .addSubcommand(sub =>
-      sub
         .setName('setreview')
         .setDescription('Set the channel where submitted applications are sent for review')
         .addChannelOption(opt =>
@@ -364,16 +358,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('commands')
-    .setDescription('Display the official ERLCX interactive command directory'),
-  new SlashCommandBuilder()
-    .setName('refont')
-    .setDescription('Convert text into custom Mathematical Sans-Serif font (𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍)')
-    .addStringOption(opt =>
-      opt
-        .setName('text')
-        .setDescription('Text to convert into 𝖳𝗁𝗂𝗌 𝖥𝗈𝗇𝗍')
-        .setRequired(true)
-    ),
+    .setDescription('Display the server interactive command directory'),
   new SlashCommandBuilder()
     .setName('media')
     .setDescription('Publish a showcase media post with credit and notification ping')
@@ -413,69 +398,6 @@ const commands = [
         .setDescription('Channel to post the media into (defaults to current channel)')
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(false)
-    ),
-  new SlashCommandBuilder()
-    .setName('department')
-    .setDescription('ERLCX Departments System')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand(sub =>
-      sub
-        .setName('panel')
-        .setDescription('Send the official department information panel')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel to send department panel into (defaults to current)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false)
-        )
-    ),
-  new SlashCommandBuilder()
-    .setName('welcome')
-    .setDescription('Manage or test the ERLCX Welcome system')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand(sub =>
-      sub
-        .setName('test')
-        .setDescription('Send a test welcome card into the welcome channel')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Optional specific channel to send test welcome into')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false)
-        )
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('status')
-        .setDescription('Check whether the welcome system is currently enabled or disabled')
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('enable')
-        .setDescription('Enable the welcome system for new member joins')
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('disable')
-        .setDescription('Disable the welcome system for new member joins')
-    ),
-  new SlashCommandBuilder()
-    .setName('staffdocs')
-    .setDescription('ERLCX Staff Documentation System')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand(sub =>
-      sub
-        .setName('panel')
-        .setDescription('Send the official staff documentation hub with dropdown menu')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel to send documentation hub into (defaults to current)')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(false)
-        )
     ),
   new SlashCommandBuilder()
     .setName('promote')
@@ -593,25 +515,7 @@ const commands = [
             .setDescription('Reason for your leave of absence')
             .setRequired(true)
         )
-    ),
-  new SlashCommandBuilder()
-    .setName('config')
-    .setDescription('Open the interactive bot configuration control panel')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addIntegerOption(opt =>
-      opt
-        .setName('page')
-        .setDescription('Page number to open directly (1 to 8)')
-        .setMinValue(1)
-        .setMaxValue(8)
-        .setRequired(false)
     )
-    .addStringOption(opt =>
-      opt
-        .setName('bot_id')
-        .setDescription('Specific Bot Identification Number to configure (Admins only)')
-        .setRequired(false)
-    ),
 ].map(cmd => cmd.toJSON());
 
 export const adminOnlyCommands = [
@@ -755,24 +659,30 @@ export async function deployCommands(customToken = null, customClientId = null, 
   const cmds = setupOnly ? configOnlyCommand : (isMaster ? masterCommands : customerCommands);
 
   try {
-    // 1. Deploy Global Slash Commands (visible across ALL servers with NO duplicates)
-    console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Client: ${clientId}...`);
-    await restClient.put(
-      Routes.applicationCommands(clientId),
-      { body: cmds }
-    );
-    console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands across all servers!`);
-
-    // 2. Clear any lingering guild-scoped commands to prevent duplicate commands in Discord's menu
-    const guildToClean = customGuildId || process.env.GUILD_ID;
-    if (guildToClean && guildToClean.trim() !== '') {
+    if (customGuildId && customGuildId.trim() !== '') {
+      // Clear global slash commands to prevent Discord from displaying duplicates
       try {
         await restClient.put(
-          Routes.applicationGuildCommands(clientId, guildToClean),
+          Routes.applicationCommands(clientId),
           { body: [] }
         );
-        console.log(`[DEPLOY] Cleared legacy guild-scoped commands for Guild: ${guildToClean} to prevent duplicates.`);
       } catch {}
+
+      // Direct Guild Registration — INSTANTLY available in Discord UI for this server (0 delay)
+      console.log(`[DEPLOY] Registering ${cmds.length} GUILD commands for Client ${clientId} in Guild: ${customGuildId}...`);
+      await restClient.put(
+        Routes.applicationGuildCommands(clientId, customGuildId.trim()),
+        { body: cmds }
+      );
+      console.log(`[DEPLOY] Successfully deployed ${cmds.length} INSTANT guild commands in Guild: ${customGuildId}!`);
+    } else {
+      // Global Slash Commands (visible across ALL servers)
+      console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Client: ${clientId}...`);
+      await restClient.put(
+        Routes.applicationCommands(clientId),
+        { body: cmds }
+      );
+      console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands across all servers!`);
     }
   } catch (error) {
     console.error('[DEPLOY] Error deploying slash commands:', error);

@@ -1,6 +1,8 @@
 {
   "status": "online",
-  "disabledCategories": [],
+  "disabledCategories": [
+    "general"
+  ],
   "rulesReadUsers": [
     "523693281541095424",
     "1144463531362746418",
@@ -12,5 +14,5 @@
     "1283676137452470334",
     "811214306946842624"
   ],
-  "reportStaffDisabled": true
+  "reportStaffDisabled": false
 }

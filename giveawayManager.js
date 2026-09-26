@@ -6,8 +6,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const GIVEAWAYS_FILE = path.join(__dirname, 'data', 'giveaways.json');
 
-export const GIVEAWAY_EMOJI = '<:Giveaway:1550313817127395359>';
-export const GIVEAWAY_EMOJI_OBJ = { id: '1550313817127395359', name: 'Giveaway' };
+export const GIVEAWAY_EMOJI = '<:giveaway:1549989440234066000>';
+export const GIVEAWAY_EMOJI_OBJ = { id: '1549989440234066000', name: 'giveaway' };
 
 function readJsonFile(filePath, defaultData) {
   try {
@@ -369,8 +369,10 @@ function extractTextFromComponents(components) {
  */
 export function recoverGiveawayFromMessage(message) {
   if (!message) return null;
-
-  let text = (message.content || '') + '\n' + extractTextFromComponents(message.components);
+  const store = loadGiveaways();
+  if (store.giveaways && store.giveaways[message.id]) {
+    return store.giveaways[message.id];
+  }
   if (Array.isArray(message.embeds)) {
     for (const em of message.embeds) {
       if (em.title) text += '\n' + em.title;

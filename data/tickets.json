@@ -199,6 +199,44 @@
       "duration": "1h 3m",
       "logMessageId": "1550441999277232178",
       "archivedAt": 1789724581362
+    },
+    {
+      "channelId": "1552926107269861420",
+      "channelName": "ticket-kims3166",
+      "authorId": "523693281541095424",
+      "authorTag": "kims3166",
+      "category": "cat_1",
+      "categoryLabel": "General Support",
+      "reason": "testt",
+      "claimedBy": null,
+      "claimedTag": null,
+      "closedById": "523693281541095424",
+      "closedByTag": "kims3166",
+      "closeReason": "testt",
+      "createdAt": 1790316836232,
+      "closedAt": 1790316973031,
+      "duration": "2m 16s",
+      "logMessageId": null,
+      "archivedAt": 1790316973032
+    },
+    {
+      "channelId": "1552944276118306877",
+      "channelName": "ticket-kims3166",
+      "authorId": "523693281541095424",
+      "authorTag": "kims3166",
+      "category": "cat_1",
+      "categoryLabel": "General Support",
+      "reason": "testtt",
+      "claimedBy": "523693281541095424",
+      "claimedTag": "kims3166",
+      "closedById": "523693281541095424",
+      "closedByTag": "kims3166",
+      "closeReason": "Inquiry resolved by user",
+      "createdAt": 1790321167886,
+      "closedAt": 1790321239675,
+      "duration": "1m 9s",
+      "logMessageId": "1552944569153355817",
+      "archivedAt": 1790321239676
     }
   ]
 }

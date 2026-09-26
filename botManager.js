@@ -48,13 +48,19 @@ export const DEFAULT_CUSTOMIZATIONS = {
     { id: "cat_5", name: "Other", spawnCategoryId: "", pingRoleId: "" }
   ],
   ticketPingRoleId: "",         // Default fallback role to ping when ticket opens
+  ticketClaimRoleId: "",        // Specific role allowed to claim tickets
   transcriptsChannelId: "",
   ticketCategoryId: "",         // Default fallback Discord category where ticket channels spawn
+  showRulesButton: true,        // Toggle ticket rules button visibility
+  rulesButtonLabel: "Server Guidelines",
+  rulesButtonStyle: 2,          // 1: Primary, 2: Secondary, 3: Success, 4: Danger
 
   // ─── Sessions / ER:LC ─────────────────────────────────────────────────────
   sessionTopBannerUrl: "",
   sessionShutdownBannerUrl: "",
   sessionBottomBannerUrl: "",
+  sessionVoteTopBannerUrl: "",
+  sessionVoteBottomBannerUrl: "",
   sessionChannelId: "",
   ingameVcId: "",
   queueVcId: "",
@@ -69,7 +75,9 @@ export const DEFAULT_CUSTOMIZATIONS = {
   appTopBannerUrl: "",
   appBottomBannerUrl: "",
   infractBannerUrl: "",
+  infractionBottomBannerUrl: "",
   promoteBannerUrl: "",
+  promotionBottomBannerUrl: "",
   staffDocsTopBannerUrl: "",
   staffDocsBottomBannerUrl: "",
   deptBannerUrl: "",
@@ -77,7 +85,7 @@ export const DEFAULT_CUSTOMIZATIONS = {
   regulationsChannelId: "",
   welcomeBannerUrl: "",
 
-  // ─── Staff Panels ──────────────────────────────────────────────────────────
+  // ─── Staff Panels & Docs ───────────────────────────────────────────────────
   infractionStaffRoleId: "",    // Staff role authorized to issue infractions
   infractRemoveRoleId: "",      // Role removed when infraction issued
   infractGiveRoleId: "",        // Role given when infraction issued
@@ -88,6 +96,11 @@ export const DEFAULT_CUSTOMIZATIONS = {
     "> Holding a staff position is a privilege that requires consistent activity, professionalism, and accountability.",
   appTitle: "Staff Application",
   appQuizIntroText: "Welcome to the in-game quiz! Answer all questions honestly. Your response will be reviewed by management.",
+  ingameQuestions: "",
+  discordQuestions: "",
+  staffDocsTitle: "Official Staff Documentation",
+  staffDocsDescription: "Welcome to the official Staff Documentation directory. Review operational policies below.",
+  staffDocsLayout: "select",   // "select" | "buttons"
 
   // ─── Welcome System ────────────────────────────────────────────────────────
   welcomeEnabled: false,
@@ -105,7 +118,8 @@ export const DEFAULT_CUSTOMIZATIONS = {
   deptChannelId: "",
   staffDocsChannelId: "",
 
-  // ─── Staff Roles ───────────────────────────────────────────────────────────
+  // ─── Staff Roles & Permissions ─────────────────────────────────────────────
+  botStaffRoleId: "",           // Authorized bot staff role required to execute customer bot staff commands
   staffRoleIds: [],
 
   // ─── AI ────────────────────────────────────────────────────────────────────
@@ -115,10 +129,15 @@ export const DEFAULT_CUSTOMIZATIONS = {
 };
 
 
+let _instancesCache = null;
+
 /**
- * Load all bot instances from disk
+ * Load all bot instances (cached in-memory for instant 0ms access)
  */
-export function loadBotInstances() {
+export function loadBotInstances(forceReload = false) {
+  if (_instancesCache && !forceReload) {
+    return _instancesCache;
+  }
   try {
     if (!fs.existsSync(INSTANCES_FILE)) {
       const initial = {
@@ -137,20 +156,23 @@ export function loadBotInstances() {
         }
       };
       fs.writeFileSync(INSTANCES_FILE, JSON.stringify(initial, null, 2), 'utf-8');
+      _instancesCache = initial;
       return initial;
     }
     const raw = fs.readFileSync(INSTANCES_FILE, 'utf-8');
-    return JSON.parse(raw);
+    _instancesCache = JSON.parse(raw);
+    return _instancesCache;
   } catch (err) {
     console.error("Error reading bot instances:", err);
-    return {};
+    return _instancesCache || {};
   }
 }
 
 /**
- * Save all bot instances to disk
+ * Save all bot instances to disk and update memory cache
  */
 export function saveBotInstances(instances) {
+  _instancesCache = instances;
   try {
     fs.writeFileSync(INSTANCES_FILE, JSON.stringify(instances, null, 2), 'utf-8');
   } catch (err) {
@@ -202,12 +224,37 @@ export function createBotInstance(ownerUserId, options = {}) {
   return instances[botId];
 }
 
+let onBotBannedCallback = null;
+export function setOnBotBanned(cb) {
+  onBotBannedCallback = cb;
+}
+
+let onBotUnbannedCallback = null;
+export function setOnBotUnbanned(cb) {
+  onBotUnbannedCallback = cb;
+}
+
 /**
- * Fetch a bot instance by its Bot ID
+ * Fetch a bot instance by its Bot ID or linked Discord ID / Owner ID
  */
 export function getBotInstance(botId) {
+  if (!botId) return null;
+  const cleanId = String(botId).replace(/[<@!&>]/g, '').trim();
   const instances = loadBotInstances();
-  return instances[botId] || null;
+  if (instances[cleanId]) return instances[cleanId];
+
+  // Also check case-insensitively or via discordBotId / ownerUserId / token client ID
+  for (const [id, b] of Object.entries(instances)) {
+    if (id.toLowerCase() === cleanId.toLowerCase()) return b;
+    if (b.discordBotId === cleanId || b.ownerUserId === cleanId || b.clientId === cleanId) return b;
+    if (b.token) {
+      try {
+        const rawId = Buffer.from(b.token.split('.')[0], 'base64').toString('utf-8');
+        if (rawId === cleanId) return b;
+      } catch {}
+    }
+  }
+  return null;
 }
 
 /**
@@ -247,24 +294,31 @@ export function getOrCreateBotInstanceForUser(ownerUserId, guildId = null) {
  */
 export function updateBotInstance(botId, updates) {
   const instances = loadBotInstances();
-  if (!instances[botId]) return null;
+  const bot = getBotInstance(botId);
+  const actualId = bot ? bot.botId : botId;
+  if (!instances[actualId]) return null;
 
-  instances[botId] = {
-    ...instances[botId],
+  instances[actualId] = {
+    ...instances[actualId],
     ...updates,
     updatedAt: new Date().toISOString()
   };
 
   // Re-check setup completion
-  if (instances[botId].token && instances[botId].erlcApiKey) {
-    instances[botId].setupCompleted = true;
-    if (instances[botId].status === 'unconfigured') {
-      instances[botId].status = 'active';
+  if (instances[actualId].token && instances[actualId].erlcApiKey) {
+    instances[actualId].setupCompleted = true;
+    if (instances[actualId].status === 'unconfigured') {
+      instances[actualId].status = 'active';
     }
   }
 
+  // Preserve banned status if instance is banned
+  if (instances[actualId].banned) {
+    instances[actualId].status = 'banned';
+  }
+
   saveBotInstances(instances);
-  return instances[botId];
+  return instances[actualId];
 }
 
 /**
@@ -272,16 +326,18 @@ export function updateBotInstance(botId, updates) {
  */
 export function updateBotCustomization(botId, key, value) {
   const instances = loadBotInstances();
-  if (!instances[botId]) return null;
+  const bot = getBotInstance(botId);
+  const actualId = bot ? bot.botId : botId;
+  if (!instances[actualId]) return null;
 
-  if (!instances[botId].customizations) {
-    instances[botId].customizations = { ...DEFAULT_CUSTOMIZATIONS };
+  if (!instances[actualId].customizations) {
+    instances[actualId].customizations = { ...DEFAULT_CUSTOMIZATIONS };
   }
 
-  instances[botId].customizations[key] = value;
-  instances[botId].updatedAt = new Date().toISOString();
+  instances[actualId].customizations[key] = value;
+  instances[actualId].updatedAt = new Date().toISOString();
   saveBotInstances(instances);
-  return instances[botId];
+  return instances[actualId];
 }
 
 /**
@@ -289,45 +345,55 @@ export function updateBotCustomization(botId, key, value) {
  */
 export function retriggerBot(botId) {
   const instances = loadBotInstances();
-  const bot = instances[botId];
+  const bot = getBotInstance(botId);
   if (!bot) {
     return { success: false, message: `Bot ID '${botId}' not found.` };
   }
+  const actualId = bot.botId;
   if (bot.banned) {
-    return { success: false, message: `Cannot retrigger bot '${botId}' because it is banned.` };
+    return { success: false, message: `Cannot retrigger bot '${actualId}' because it is banned.` };
   }
 
-  bot.status = 'active';
-  bot.lastRetriggeredAt = new Date().toISOString();
+  instances[actualId].status = 'active';
+  instances[actualId].lastRetriggeredAt = new Date().toISOString();
   saveBotInstances(instances);
 
   return {
     success: true,
-    message: `Bot '${botId}' has been retriggered and refreshed successfully.`,
-    bot
+    message: `Bot '${actualId}' has been retriggered and refreshed successfully.`,
+    bot: instances[actualId]
   };
 }
 
 /**
- * Ban a bot instance
+ * Ban a bot instance and shut down running processes
  */
 export function banBot(botId, reason = 'Administrative action by owner') {
   const instances = loadBotInstances();
-  const bot = instances[botId];
+  const bot = getBotInstance(botId);
   if (!bot) {
     return { success: false, message: `Bot ID '${botId}' not found.` };
   }
-  if (botId === MASTER_BOT_ID) {
+  const actualId = bot.botId;
+  if (actualId === MASTER_BOT_ID) {
     return { success: false, message: `The Master Bot cannot be banned.` };
   }
 
-  bot.banned = true;
-  bot.bannedReason = reason;
-  bot.status = 'banned';
-  bot.bannedAt = new Date().toISOString();
+  instances[actualId].banned = true;
+  instances[actualId].bannedReason = reason;
+  instances[actualId].status = 'banned';
+  instances[actualId].bannedAt = new Date().toISOString();
   saveBotInstances(instances);
 
-  return { success: true, message: `Bot '${botId}' has been banned. Reason: ${reason}`, bot };
+  if (onBotBannedCallback) {
+    try {
+      onBotBannedCallback(actualId, reason);
+    } catch (err) {
+      console.error(`[banBot] Error executing onBotBannedCallback for ${actualId}:`, err);
+    }
+  }
+
+  return { success: true, message: `Bot '${actualId}' has been banned and shut off. Reason: ${reason}`, bot: instances[actualId] };
 }
 
 /**
@@ -335,18 +401,27 @@ export function banBot(botId, reason = 'Administrative action by owner') {
  */
 export function unbanBot(botId) {
   const instances = loadBotInstances();
-  const bot = instances[botId];
+  const bot = getBotInstance(botId);
   if (!bot) {
     return { success: false, message: `Bot ID '${botId}' not found.` };
   }
+  const actualId = bot.botId;
 
-  bot.banned = false;
-  bot.bannedReason = null;
-  bot.status = bot.setupCompleted ? 'active' : 'unconfigured';
-  bot.unbannedAt = new Date().toISOString();
+  instances[actualId].banned = false;
+  instances[actualId].bannedReason = null;
+  instances[actualId].status = instances[actualId].setupCompleted ? 'active' : 'unconfigured';
+  instances[actualId].unbannedAt = new Date().toISOString();
   saveBotInstances(instances);
 
-  return { success: true, message: `Bot '${botId}' has been unbanned.`, bot };
+  if (onBotUnbannedCallback) {
+    try {
+      onBotUnbannedCallback(actualId);
+    } catch (err) {
+      console.error(`[unbanBot] Error executing onBotUnbannedCallback for ${actualId}:`, err);
+    }
+  }
+
+  return { success: true, message: `Bot '${actualId}' has been unbanned.`, bot: instances[actualId] };
 }
 
 /**

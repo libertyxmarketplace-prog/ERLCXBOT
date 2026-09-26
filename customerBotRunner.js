@@ -5,13 +5,30 @@ import {
   Events,
   ActivityType
 } from 'discord.js';
-import { loadBotInstances, getBotInstance, updateBotInstance } from './botManager.js';
+import { loadBotInstances, getBotInstance, updateBotInstance, setOnBotBanned, setOnBotUnbanned } from './botManager.js';
 import { deployCommands, customerCommands } from './deploy-commands.js';
 
 // Map of active running clients: botId -> Client
 export const activeCustomerClients = new Map();
 
 let interactionHandler = null;
+let messageHandler = null;
+
+// Immediately enforce ban actions across customer bot clients
+setOnBotBanned(async (botId) => {
+  console.log(`[CUSTOMER BOT] Administrative ban received for ${botId}. Disconnecting and destroying client...`);
+  await stopCustomerBot(botId);
+});
+
+setOnBotUnbanned(async (botId) => {
+  const bot = getBotInstance(botId);
+  if (bot?.token && bot.token.trim() !== '' && bot.setupCompleted && !bot.banned) {
+    console.log(`[CUSTOMER BOT] Bot ${botId} unbanned. Re-establishing connection...`);
+    await startCustomerBot(botId).catch(err => {
+      console.warn(`[CUSTOMER BOT] Error reconnecting unbanned bot ${botId}:`, err.message);
+    });
+  }
+});
 
 /**
  * Register the main interaction handler function to be shared across customer bots
@@ -19,21 +36,26 @@ let interactionHandler = null;
 export function setInteractionHandler(handler) {
   interactionHandler = handler;
 }
+
+/**
+ * Register the main message handler function to be shared across customer bots for prefix commands
+ */
+export function setMessageHandler(handler) {
+  messageHandler = handler;
+}
+
 export async function startCustomerBot(botId) {
   const bot = getBotInstance(botId);
   if (!bot || !bot.token || bot.token.trim() === '' || bot.banned) {
+    if (bot?.banned && activeCustomerClients.has(botId)) {
+      await stopCustomerBot(botId);
+    }
     return false;
   }
 
   // If already running, clean up old client first
   if (activeCustomerClients.has(botId)) {
-    try {
-      const oldClient = activeCustomerClients.get(botId);
-      oldClient.destroy();
-    } catch (e) {
-      console.warn(`[CUSTOMER BOT] Error stopping old client for ${botId}:`, e.message);
-    }
-    activeCustomerClients.delete(botId);
+    await stopCustomerBot(botId);
   }
 
   try {
@@ -49,12 +71,17 @@ export async function startCustomerBot(botId) {
       ],
       partials: [Partials.Channel, Partials.Message, Partials.GuildMember, Partials.User]
     });
-    customerClient.botId = botId;
+    customerClient.botId = bot.botId;
 
     customerClient.once(Events.ClientReady, async () => {
       console.log(`=============================================`);
-      console.log(`[CUSTOMER BOT ONLINE] Bot ID ${botId} logged in as ${customerClient.user.tag}`);
+      console.log(`[CUSTOMER BOT ONLINE] Bot ID ${bot.botId} logged in as ${customerClient.user.tag} (${customerClient.user.id})`);
       console.log(`=============================================`);
+
+      updateBotInstance(bot.botId, {
+        discordBotId: customerClient.user.id,
+        discordTag: customerClient.user.tag
+      });
 
       try {
         customerClient.user.setPresence({
@@ -63,14 +90,7 @@ export async function startCustomerBot(botId) {
         });
       } catch {}
 
-      // 1. Deploy Global Slash Commands for customer bot (visible across all servers)
-      try {
-        await deployCommands(bot.token, customerClient.user.id, null, false);
-      } catch (e) {
-        console.warn(`[CUSTOMER BOT] Global deploy note:`, e.message);
-      }
-
-      // 2. Also register directly to every guild the bot is in for instant availability
+      // Register directly to every guild the bot is in for instant availability (clearing global to avoid duplicates)
       for (const guild of customerClient.guilds.cache.values()) {
         try {
           await deployCommands(bot.token, customerClient.user.id, guild.id, false);
@@ -100,6 +120,7 @@ export async function startCustomerBot(botId) {
     customerClient.on(Events.GuildMemberAdd, async member => {
       try {
         const currentBot = getBotInstance(botId);
+        if (!currentBot || currentBot.banned) return;
         const cust = currentBot?.customizations;
         if (!cust?.welcomeEnabled) return;
 
@@ -184,6 +205,19 @@ export async function startCustomerBot(botId) {
     // Handle slash commands, buttons, and modals for this customer bot
     customerClient.on(Events.InteractionCreate, async interaction => {
       try {
+        const currentBot = getBotInstance(botId);
+        if (!currentBot || currentBot.banned) {
+          console.warn(`[CUSTOMER BOT ${botId}] Blocked interaction on banned bot instance.`);
+          await stopCustomerBot(botId);
+          if (interaction.isRepliable()) {
+            return interaction.reply({
+              content: `<:xmark:1552901454098989056> **Bot Instance Suspended**\n> This bot instance (\`${botId}\`) has been suspended by administration.\n> **Reason:** \`${currentBot?.bannedReason || 'Violation of service terms'}\``,
+              flags: 64
+            }).catch(() => null);
+          }
+          return;
+        }
+
         if (interactionHandler) {
           await interactionHandler(interaction);
         }
@@ -193,9 +227,26 @@ export async function startCustomerBot(botId) {
       }
     });
 
+    // Handle prefix commands for this customer bot
+    customerClient.on(Events.MessageCreate, async message => {
+      try {
+        const currentBot = getBotInstance(botId);
+        if (!currentBot || currentBot.banned) {
+          await stopCustomerBot(botId);
+          return;
+        }
+
+        if (messageHandler) {
+          await messageHandler(message);
+        }
+      } catch (err) {
+        console.error(`[CUSTOMER BOT ${botId}] Message error:`, err);
+      }
+    });
+
     await customerClient.login(bot.token);
-    activeCustomerClients.set(botId, customerClient);
-    updateBotInstance(botId, { status: 'active', setupCompleted: true });
+    activeCustomerClients.set(bot.botId, customerClient);
+    updateBotInstance(bot.botId, { status: 'active', setupCompleted: true });
     return true;
   } catch (err) {
     console.error(`[CUSTOMER BOT ${botId}] Login failed:`, err.message);
@@ -205,16 +256,26 @@ export async function startCustomerBot(botId) {
 }
 
 /**
- * Stop a running customer bot.
+ * Stop and completely disconnect a running customer bot.
  */
-export function stopCustomerBot(botId) {
-  if (activeCustomerClients.has(botId)) {
+export async function stopCustomerBot(botId) {
+  const bot = getBotInstance(botId);
+  const actualId = bot ? bot.botId : botId;
+  if (activeCustomerClients.has(actualId)) {
     try {
-      const client = activeCustomerClients.get(botId);
-      client.destroy();
-    } catch {}
-    activeCustomerClients.delete(botId);
-    return true;
+      const client = activeCustomerClients.get(actualId);
+      activeCustomerClients.delete(actualId);
+      if (client) {
+        client.removeAllListeners();
+        await client.destroy().catch(() => null);
+      }
+      console.log(`[CUSTOMER BOT] Client for bot ${actualId} completely shut off and destroyed.`);
+      return true;
+    } catch (e) {
+      console.warn(`[CUSTOMER BOT] Error stopping bot ${actualId}:`, e.message);
+      activeCustomerClients.delete(actualId);
+      return false;
+    }
   }
   return false;
 }

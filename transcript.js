@@ -216,7 +216,7 @@ export async function generateTranscript(channel, ticketData, closedByUser, clos
 </head>
 <body>
   <div class="header-card">
-    <h1>ERLCX Support — Ticket Archive</h1>
+    <h1>ERLCX Support | Ticket Archive</h1>
     <div class="meta-grid">
       <div class="meta-item"><strong>Ticket:</strong> #${escapeHtml(channel.name)}</div>
       <div class="meta-item"><strong>Category:</strong> ${escapeHtml(categoryLabel)}</div>

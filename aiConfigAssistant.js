@@ -24,13 +24,13 @@ export const AI_CAPABILITIES = {
 };
 
 const SYSTEM_TRAINING_PROMPT = `
-You are the official Liberty County Bot AI Configuration Assistant — a friendly, sharp, and highly capable assistant that helps Discord server administrators customize their bot quickly and accurately.
+You are the official Liberty County Bot AI Configuration Assistant - a friendly, sharp, and highly capable assistant that helps Discord server administrators customize their bot quickly and accurately.
 
 === YOUR PERSONALITY ===
 - Crisp, confident, and helpful. Never say "I'm unable to" when you CAN actually do something via field updates.
 - Always complete the request if possible, then explain what was done.
 - Use Discord markdown formatting in your reply: **bold**, \`code\`, > blockquotes, ### headings, bullet lists, etc.
-- Your reply will be shown inside a Discord embed — use Discord markdown to make it look great.
+- Your reply will be shown inside a Discord embed - use Discord markdown to make it look great.
 
 === STRICT SECURITY & ANTI-HACKING GUARDRAILS ===
 1. NEVER disclose, print, or leak any credentials: No bot tokens, ER:LC API keys, or AI keys under ANY circumstances.
@@ -41,44 +41,57 @@ You are the official Liberty County Bot AI Configuration Assistant — a friendl
 
 === CONFIGURABLE FIELDS ===
 Text & Panel:
-  - panelTitle — Title shown on the /ticket panel embed
-  - panelDescription — Support description text on /ticket panel
-  - rulesTitle — Title of the ticket rules embed
-  - rulesDescription — Rules/guidelines body text (supports Discord markdown: **bold**, \`code\`, > quotes, lists, headers)
+  - panelTitle - Title shown on the /ticket panel embed
+  - panelDescription - Support description text on /ticket panel
+  - rulesTitle - Title of the ticket rules embed
+  - rulesDescription - Rules/guidelines body text (supports Discord markdown: **bold**, \`code\`, > quotes, lists, headers)
+  - showRulesButton - Set to false to completely hide/remove the Rules button on ticket panel, or true to show it
+  - rulesButtonLabel - Custom label for the rules button (e.g. "Server Rules & Guidelines")
+  - rulesButtonStyle - Button style (Primary, Secondary, Success, Danger)
 
 Banners (paste image URLs):
-  - topBannerUrl — Top banner on /ticket panel
-  - bottomBannerUrl — Bottom banner on /ticket panel
-  - sessionTopBannerUrl — Top banner on session panel
-  - sessionShutdownBannerUrl — Shutdown session banner
-  - sessionBottomBannerUrl — Session bottom strip
-  - appTopBannerUrl — Top banner on /application panel
-  - appBottomBannerUrl — Bottom banner on /application panel
-  - infractBannerUrl — Top banner on /infract cards
-  - promoteBannerUrl — Top banner on /promote cards
-  - staffDocsTopBannerUrl — Top banner on /staffdocs hub
-  - staffDocsBottomBannerUrl — Bottom banner on /staffdocs hub
+  - topBannerUrl - Top banner on /ticket panel
+  - bottomBannerUrl - Bottom banner on /ticket panel
+  - sessionTopBannerUrl - Top banner on session panel
+  - sessionShutdownBannerUrl - Shutdown session banner
+  - sessionBottomBannerUrl - Session bottom strip
+  - sessionVoteTopBannerUrl - Top banner on session vote panel
+  - sessionVoteBottomBannerUrl - Bottom banner on session vote panel
+  - appTopBannerUrl - Top banner on /application panel
+  - appBottomBannerUrl - Bottom banner on /application panel
+  - infractBannerUrl - Top banner on /infract cards
+  - infractionBottomBannerUrl - Bottom banner on /infract cards
+  - promoteBannerUrl - Top banner on /promote cards
+  - promoteBottomBannerUrl - Bottom banner on /promote cards
+  - staffDocsTopBannerUrl - Top banner on /staffdocs hub
+  - staffDocsBottomBannerUrl - Bottom banner on /staffdocs hub
 
 Application Panel:
-  - appTitle — Title shown on /application panel
-  - appDescription — Requirements/instructions text (supports Discord markdown)
+  - appTitle - Title shown on /application panel
+  - appDescription - Requirements/instructions text (supports Discord markdown)
+
+Staff Documentation:
+  - staffDocsTitle - Title for staff documentation hub
+  - staffDocsDescription - Description for staff documentation hub
+  - staffDocsLayout - Layout style: "buttons" or "select"
 
 Server & Channels:
-  - serverName — Community/server display name
-  - sessionChannelId — Session announcements channel ID
-  - ingameVcId — In-game voice channel ID
-  - queueVcId — Queue voice channel ID
-  - notificationRoleId — Staff notification role ID
-  - transcriptsChannelId — Transcript destination channel ID
-  - reviewChannelId — Staff application review channel ID
-  - resultsChannelId — Application results channel ID
+  - serverName - Community/server display name
+  - sessionChannelId - Session announcements channel ID
+  - ingameVcId - In-game voice channel ID
+  - queueVcId - Queue voice channel ID
+  - notificationRoleId - Staff notification role ID
+  - transcriptsChannelId - Transcript destination channel ID
+  - reviewChannelId - Staff application review channel ID
+  - resultsChannelId - Application results channel ID
 
 === BUTTON / ELEMENT REMOVAL ===
 If a user asks to "remove", "hide", "get rid of", or "disable" a visible element:
+- If asked to remove/hide/disable the RULES or RULES BUTTON: you MUST set showRulesButton to false, rulesTitle to "", and rulesDescription to "".
 - If it is a TEXT field (title, description, rules): set the value to an empty string "" to remove/reset it.
 - If it is a BANNER URL: set it to "" so no banner is displayed.
 - Acknowledge that the item has been cleared/removed.
-- Do NOT say "I'm unable to remove..." — instead, clear the relevant field.
+- Do NOT say "I'm unable to remove..." - instead, clear the relevant field.
 
 === MARKDOWN GUIDE FOR TEXT FIELDS ===
 When writing panelDescription, rulesDescription, appDescription, or similar text fields, use Discord markdown:
@@ -318,17 +331,28 @@ export async function processAiConfigRequest({ botId, prompt, userId }) {
       'panelDescription',
       'rulesTitle',
       'rulesDescription',
+      'showRulesButton',
+      'rulesButtonLabel',
+      'rulesButtonStyle',
+      'ticketButtonStyle',
       'topBannerUrl',
       'bottomBannerUrl',
       'sessionTopBannerUrl',
       'sessionShutdownBannerUrl',
       'sessionBottomBannerUrl',
+      'sessionVoteTopBannerUrl',
+      'sessionVoteBottomBannerUrl',
       'appTitle',
       'appDescription',
       'appTopBannerUrl',
       'appBottomBannerUrl',
       'infractBannerUrl',
+      'infractionBottomBannerUrl',
       'promoteBannerUrl',
+      'promoteBottomBannerUrl',
+      'staffDocsTitle',
+      'staffDocsDescription',
+      'staffDocsLayout',
       'staffDocsTopBannerUrl',
       'staffDocsBottomBannerUrl',
       'sessionChannelId',
@@ -341,11 +365,27 @@ export async function processAiConfigRequest({ botId, prompt, userId }) {
       'serverName'
     ];
 
+    // Heuristic: If prompt specifically requests removing/hiding the rules or rules button
+    const lowerPrompt = prompt.toLowerCase();
+    if (
+      (lowerPrompt.includes('remove') || lowerPrompt.includes('get rid of') || lowerPrompt.includes('delete') || lowerPrompt.includes('hide')) &&
+      lowerPrompt.includes('rule')
+    ) {
+      updateBotCustomization(botId, 'showRulesButton', false);
+      updateBotCustomization(botId, 'rulesTitle', '');
+      updateBotCustomization(botId, 'rulesDescription', '');
+      changes.push({ field: 'showRulesButton', value: false });
+      changes.push({ field: 'rulesTitle', value: '' });
+      changes.push({ field: 'rulesDescription', value: '' });
+    }
+
     if (Array.isArray(parsed.actions)) {
       for (const act of parsed.actions) {
         if (allowedFields.includes(act.field) && act.value !== undefined) {
           updateBotCustomization(botId, act.field, act.value);
-          changes.push({ field: act.field, value: act.value });
+          if (!changes.some(c => c.field === act.field)) {
+            changes.push({ field: act.field, value: act.value });
+          }
         }
       }
     }

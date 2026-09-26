@@ -26,6 +26,19 @@ function getBottomBannerPayload() {
   };
 }
 
+export function isValidHttpUrl(str) {
+  if (!str || typeof str !== 'string') return false;
+  const s = str.trim();
+  if (!s.startsWith('http://') && !s.startsWith('https://')) return false;
+  if (s.includes(' ')) return false;
+  try {
+    const parsed = new URL(s);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // Cache Roblox user info to prevent rate limits
 let cachedOwnerName = null;
 let lastOwnerFetch = 0;
@@ -196,11 +209,13 @@ export function buildSessionPanel(sessionData, customizations = {}) {
     ? `https://policeroleplay.community/join?code=${encodeURIComponent(joinCode)}`
     : null;
 
-  const sessionTopBanner = customizations.sessionTopBannerUrl || CONFIG.SESSION.TOP_BANNER_URL || '';
+  const sessionTopBanner = (customizations.sessionTopBannerUrl && isValidHttpUrl(customizations.sessionTopBannerUrl))
+    ? customizations.sessionTopBannerUrl.trim()
+    : null;
   const communityName = customizations.serverName || name || 'Live Session';
 
   const containerComponents = [
-    // 1. Top Banner (Sessions Header) — only if a URL is set
+    // 1. Top Banner (Sessions Header) - only if a valid URL is set
     ...(sessionTopBanner ? [{
       type: 12,
       items: [{ media: { url: sessionTopBanner } }]
@@ -256,7 +271,7 @@ export function buildSessionPanel(sessionData, customizations = {}) {
       accessory: {
         type: 2,
         style: 2, // Secondary Gray Pill
-        label: joinCode || 'olrpp',
+        label: joinCode || 'Not Set',
         disabled: true,
         custom_id: 'session_info_code'
       }
@@ -345,23 +360,16 @@ export function buildSessionPanel(sessionData, customizations = {}) {
     }
   ];
 
-  // 10. Bottom Banner (custom per-bot URL preferred, then local file fallback)
-  const sessionBottomBanner = customizations.sessionBottomBannerUrl || '';
+  // 10. Bottom Banner (strictly only if configured by user)
+  const sessionBottomBanner = (customizations.sessionBottomBannerUrl && isValidHttpUrl(customizations.sessionBottomBannerUrl))
+    ? customizations.sessionBottomBannerUrl.trim()
+    : null;
   let files = [];
   if (sessionBottomBanner) {
     containerComponents.push({
       type: 12,
       items: [{ media: { url: sessionBottomBanner } }]
     });
-  } else {
-    const bannerInfo = getBottomBannerPayload();
-    files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
-    if (bannerInfo.url) {
-      containerComponents.push({
-        type: 12,
-        items: [{ media: { url: bannerInfo.url } }]
-      });
-    }
   }
 
   // 11. Footer with relative timestamp
@@ -494,131 +502,149 @@ export function saveSessionVote(vote) {
 /**
  * Builds the Discord Components V2 Session Vote Container
  */
-export function buildSessionVotePayload(vote) {
-  const currentVotes = vote.voters.length;
+export function buildSessionVotePayload(vote, customConfig = null) {
+  const currentVotes = Array.isArray(vote.voters) ? vote.voters.length : 0;
   const isGoalReached = currentVotes >= vote.requiredVotes;
+  const cust = customConfig || vote?.customizations || {};
+  const serverName = cust.serverName || vote?.serverName || 'Server';
+  const topBannerUrl = (cust.sessionVoteTopBannerUrl && isValidHttpUrl(cust.sessionVoteTopBannerUrl))
+    ? cust.sessionVoteTopBannerUrl.trim()
+    : ((cust.sessionTopBannerUrl && isValidHttpUrl(cust.sessionTopBannerUrl)) ? cust.sessionTopBannerUrl.trim() : ((vote?.topBannerUrl && isValidHttpUrl(vote.topBannerUrl)) ? vote.topBannerUrl.trim() : null));
 
-  const containerComponents = [
-    // 1. Top Banner Image
-    {
-      type: 12,
-      items: [
-        {
-          media: {
-            url: CONFIG.SESSION.VOTE_TOP_BANNER_URL
-          }
-        }
-      ]
-    },
-    // 2. Title & Professional Description (No emojis, no bullet dots)
-    {
-      type: 10,
-      content: `### ERLCX — Session Vote\n> Cast your vote below to begin today's session.`
-    },
-    // 3. Row: Session Votes (Pill on the far right)
-    {
-      type: 9, // Section
-      components: [
-        {
-          type: 10,
-          content: '**Session Votes**\n-# Total community votes submitted so far.'
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: isGoalReached ? 3 : 2, // Green if reached, gray if in progress
-        label: `${currentVotes}/${vote.requiredVotes} Votes`,
-        disabled: true,
-        custom_id: 'session_vote_tally'
-      }
-    },
-    // Horizontal divider line
-    {
-      type: 14,
-      divider: true,
-      spacing: 1
-    },
-    // 4. Row: Target Goal
-    {
-      type: 9, // Section
-      components: [
-        {
-          type: 10,
-          content: '**Target Goal**\n-# Votes required for session launch.'
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        label: `${vote.requiredVotes} Votes`,
-        disabled: true,
-        custom_id: 'session_vote_goal'
-      }
-    },
-    // 5. Row: Time Window
-    {
-      type: 9, // Section
-      components: [
-        {
-          type: 10,
-          content: '**Time Window**\n-# Voting duration period.'
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        label: vote.durationLabel || '1 Hour',
-        disabled: true,
-        custom_id: 'session_vote_time'
-      }
-    },
-    // 6. Row: Session Host
-    {
-      type: 9, // Section
-      components: [
-        {
-          type: 10,
-          content: '**Session Host**\n-# Staff member organizing this session.'
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        label: vote.hostName || 'Staff Member',
-        disabled: true,
-        custom_id: 'session_vote_host'
-      }
-    },
-    // 7. Action Row: Vote (No Emoji) & Session Notification (Custom Emoji)
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          label: 'Vote',
-          custom_id: `session_vote_cast_${vote.id}`,
-          disabled: vote.status !== 'active'
-        },
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          label: 'Session Notification',
-          emoji: { id: '1547025580535451708', name: 'Notification' },
-          custom_id: 'session_btn_notify'
-        }
-      ]
-    }
-  ];
+  const bottomBannerUrl = (cust.sessionVoteBottomBannerUrl && isValidHttpUrl(cust.sessionVoteBottomBannerUrl))
+    ? cust.sessionVoteBottomBannerUrl.trim()
+    : ((cust.sessionBottomBannerUrl && isValidHttpUrl(cust.sessionBottomBannerUrl)) ? cust.sessionBottomBannerUrl.trim() : ((vote?.bottomBannerUrl && isValidHttpUrl(vote.bottomBannerUrl)) ? vote.bottomBannerUrl.trim() : null));
 
-  // 8. Bottom Banner Image
-  if (CONFIG.SESSION.VOTE_BOTTOM_BANNER_URL) {
+  const containerComponents = [];
+
+  // 1. Top Banner Image (strictly only if valid URL)
+  if (topBannerUrl) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.VOTE_BOTTOM_BANNER_URL
+            url: topBannerUrl
+          }
+        }
+      ]
+    });
+  }
+
+  // 2. Title & Description
+  containerComponents.push({
+    type: 10,
+    content: `### ${serverName} | Session Vote\n> Cast your vote below to begin today's session.`
+  });
+
+  // 3. Row: Session Votes
+  containerComponents.push({
+    type: 9,
+    components: [
+      {
+        type: 10,
+        content: '**Session Votes**\n-# Total community votes submitted so far.'
+      }
+    ],
+    accessory: {
+      type: 2,
+      style: isGoalReached ? 3 : 2,
+      label: `${currentVotes}/${vote.requiredVotes} Votes`,
+      disabled: true,
+      custom_id: 'session_vote_tally'
+    }
+  });
+
+  // Horizontal divider line
+  containerComponents.push({
+    type: 14,
+    divider: true,
+    spacing: 1
+  });
+
+  // 4. Row: Target Goal
+  containerComponents.push({
+    type: 9,
+    components: [
+      {
+        type: 10,
+        content: '**Target Goal**\n-# Votes required for session launch.'
+      }
+    ],
+    accessory: {
+      type: 2,
+      style: 2,
+      label: `${vote.requiredVotes} Votes`,
+      disabled: true,
+      custom_id: 'session_vote_goal'
+    }
+  });
+
+  // 5. Row: Time Window
+  containerComponents.push({
+    type: 9,
+    components: [
+      {
+        type: 10,
+        content: '**Time Window**\n-# Voting duration period.'
+      }
+    ],
+    accessory: {
+      type: 2,
+      style: 2,
+      label: vote.durationLabel || '1 Hour',
+      disabled: true,
+      custom_id: 'session_vote_time'
+    }
+  });
+
+  // 6. Row: Session Host
+  containerComponents.push({
+    type: 9,
+    components: [
+      {
+        type: 10,
+        content: '**Session Host**\n-# Staff member organizing this session.'
+      }
+    ],
+    accessory: {
+      type: 2,
+      style: 2,
+      label: vote.hostName || 'Staff Member',
+      disabled: true,
+      custom_id: 'session_vote_host'
+    }
+  });
+
+  // 7. Action Row: Vote & Notification
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        label: 'Vote',
+        custom_id: `session_vote_cast_${vote.id}`,
+        disabled: vote.status !== 'active'
+      },
+      {
+        type: 2,
+        style: 2,
+        label: 'Session Notification',
+        emoji: { id: '1547025580535451708', name: 'Notification' },
+        custom_id: 'session_btn_notify'
+      }
+    ]
+  });
+
+  // 8. Bottom Banner Image (only if explicitly configured)
+  if (bottomBannerUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: bottomBannerUrl
           }
         }
       ]
@@ -632,10 +658,10 @@ export function buildSessionVotePayload(vote) {
   });
 
   return {
-    flags: 32768, // IS_COMPONENTS_V2
+    flags: 32768,
     components: [
       {
-        type: 17, // Container
+        type: 17,
         components: containerComponents
       }
     ]
@@ -659,62 +685,71 @@ export function saveSessionState(state) {
 export function buildSessionEndedPanel(sessionData = null, customizations = {}) {
   const currentPlayers = sessionData?.currentPlayers ?? 0;
   const maxPlayers = sessionData?.maxPlayers ?? 50;
-  const sessionTopBanner = customizations.sessionShutdownBannerUrl || customizations.sessionTopBannerUrl || CONFIG.SESSION.TOP_BANNER_URL || '';
+  const sessionTopBanner = (customizations.sessionShutdownBannerUrl && isValidHttpUrl(customizations.sessionShutdownBannerUrl))
+    ? customizations.sessionShutdownBannerUrl.trim()
+    : ((customizations.sessionTopBannerUrl && isValidHttpUrl(customizations.sessionTopBannerUrl)) ? customizations.sessionTopBannerUrl.trim() : null);
+  const sessionBottomBanner = (customizations.sessionShutdownBottomBannerUrl && isValidHttpUrl(customizations.sessionShutdownBottomBannerUrl))
+    ? customizations.sessionShutdownBottomBannerUrl.trim()
+    : ((customizations.sessionBottomBannerUrl && isValidHttpUrl(customizations.sessionBottomBannerUrl)) ? customizations.sessionBottomBannerUrl.trim() : null);
   const communityName = customizations.serverName || 'Session';
+  const shutdownTitle = customizations.sessionShutdownTitle || `${communityName} Session Concluded`;
+  const shutdownDesc = customizations.sessionShutdownDesc || [
+    `A **${communityName}** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today's **roleplay enjoyable**!\n`,
+    'The **server** is now **closed**. We hope you **enjoyed the session**, stay tuned for the next session **startup**!'
+  ].join('\n');
 
-  const containerComponents = [
-    // 1. Top Banner Image — use shutdown banner if configured, else session top banner
-    ...(sessionTopBanner ? [{
+  const containerComponents = [];
+
+  // 1. Top Banner Image (strictly only if valid URL)
+  if (sessionTopBanner) {
+    containerComponents.push({
       type: 12,
       items: [{ media: { url: sessionTopBanner } }]
-    }] : []),
-    // 2. Session Ended Announcement Text
-    {
-      type: 10,
-      content: [
-        `A **${communityName}** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today's **roleplay enjoyable**!\n`,
-        'The **server** is now **closed**. We hope you **enjoyed the session**, stay tuned for the next session **startup**!'
-      ].join('\n')
-    },
-    // Horizontal divider line
-    {
-      type: 14,
-      divider: true,
-      spacing: 1
-    },
-    // 3. Action Row: Get Session Notification & Unclickable In-Game Count Pill
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          label: 'Get Session Notification!',
-          emoji: { id: '1547025580535451708', name: 'Notification' },
-          custom_id: 'session_btn_notify'
-        },
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          label: `${currentPlayers}/${maxPlayers} In-Game`,
-          disabled: true,
-          custom_id: 'session_offline_players'
-        }
-      ]
-    }
-  ];
+    });
+  }
 
-  const bannerInfo = getBottomBannerPayload();
-  const files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
+  // 2. Session Ended Announcement Text
+  containerComponents.push({
+    type: 10,
+    content: `### ${shutdownTitle}\n> ${shutdownDesc}`
+  });
 
-  // 4. Bottom Banner Image
-  if (bannerInfo.url) {
+  // Horizontal divider line
+  containerComponents.push({
+    type: 14,
+    divider: true,
+    spacing: 1
+  });
+
+  // 3. Action Row: Get Session Notification & Unclickable In-Game Count Pill
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        label: 'Session Notification',
+        emoji: { id: '1547025580535451708', name: 'Notification' },
+        custom_id: 'session_btn_notify'
+      },
+      {
+        type: 2,
+        style: 2,
+        label: `${currentPlayers}/${maxPlayers} In-Game`,
+        disabled: true,
+        custom_id: 'session_offline_players'
+      }
+    ]
+  });
+
+  // 4. Bottom Banner Image (only if explicitly configured by user)
+  if (sessionBottomBanner) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: bannerInfo.url
+            url: sessionBottomBanner
           }
         }
       ]
@@ -722,70 +757,146 @@ export function buildSessionEndedPanel(sessionData = null, customizations = {}) 
   }
 
   return {
-    flags: 32768, // IS_COMPONENTS_V2
+    flags: 32768,
     components: [
       {
-        type: 17, // Container without accent_color (clean neutral border)
+        type: 17,
         components: containerComponents
       }
-    ],
-    files
+    ]
   };
 }
 
 /**
- * Builds the ERLCX Session Info announcement card matching the user's reference image:
- * Top banner, ERLCX session ended text, and bottom banner — without any buttons.
+ * Builds the Discord Components V2 Session Startup Announcement Panel
  */
-export function buildSessionInfoCard() {
-  const bannerInfo = getBottomBannerPayload();
-  const files = bannerInfo.attachment ? [bannerInfo.attachment] : [];
+export function buildSessionStartupPayload(sessionData = null, customizations = {}) {
+  const communityName = customizations.serverName || 'Server';
+  const startTitle = customizations.sessionStartTitle || `${communityName} Session Startup`;
+  const startDesc = customizations.sessionStartDesc || 'A new session is starting up! Prepare your patrol and join in-game.';
+  const topBanner = (customizations.sessionStartTopBannerUrl && isValidHttpUrl(customizations.sessionStartTopBannerUrl))
+    ? customizations.sessionStartTopBannerUrl.trim()
+    : ((customizations.sessionTopBannerUrl && isValidHttpUrl(customizations.sessionTopBannerUrl)) ? customizations.sessionTopBannerUrl.trim() : null);
+  const bottomBanner = (customizations.sessionStartBottomBannerUrl && isValidHttpUrl(customizations.sessionStartBottomBannerUrl))
+    ? customizations.sessionStartBottomBannerUrl.trim()
+    : ((customizations.sessionBottomBannerUrl && isValidHttpUrl(customizations.sessionBottomBannerUrl)) ? customizations.sessionBottomBannerUrl.trim() : null);
+  const joinCode = sessionData?.joinCode || customizations.joinCode || '';
+  const joinUrl = joinCode ? `https://policeroleplay.community/join?code=${encodeURIComponent(joinCode)}` : null;
 
-  const containerComponents = [
-    // 1. Top Banner Image
-    {
+  const containerComponents = [];
+
+  // Top Banner
+  if (topBanner) {
+    containerComponents.push({
       type: 12,
-      items: [
-        {
-          media: {
-            url: CONFIG.SESSION.TOP_BANNER_URL
-          }
-        }
-      ]
-    },
-    // 2. Session Ended Announcement Text
+      items: [{ media: { url: topBanner } }]
+    });
+  }
+
+  // Content
+  containerComponents.push({
+    type: 10,
+    content: [
+      `### ${startTitle}`,
+      `> ${startDesc}`,
+      '',
+      `• **Server**: **${communityName}**`,
+      joinCode ? `• **Join Code**: \`${joinCode}\`` : ''
+    ].filter(Boolean).join('\n')
+  });
+
+  // Divider
+  containerComponents.push({ type: 14, divider: true, spacing: 1 });
+
+  // Buttons
+  const buttons = [
     {
-      type: 10,
-      content: [
-        'An **ERLCX** session has now ended! Thank you to **everyone** who joined, created realistic scenes, and made today\'s **roleplay enjoyable**!\n',
-        'The **server** is now **closed**. We hope you **enjoyed the session**, stay tuned for the next session **startup**!'
-      ].join('\n')
+      type: 2,
+      style: 2,
+      label: 'Session Notification',
+      emoji: { id: '1547025580535451708', name: 'Notification' },
+      custom_id: 'session_btn_notify'
     }
   ];
 
-  // 3. Bottom Banner Image
-  if (bannerInfo.url) {
+  if (joinUrl) {
+    buttons.push({
+      type: 2,
+      style: 5,
+      label: 'Join Server ↗',
+      url: joinUrl
+    });
+  }
+
+  containerComponents.push({
+    type: 1,
+    components: buttons
+  });
+
+  // Bottom Banner
+  if (bottomBanner) {
     containerComponents.push({
       type: 12,
-      items: [
-        {
-          media: {
-            url: bannerInfo.url
-          }
-        }
-      ]
+      items: [{ media: { url: bottomBanner } }]
     });
   }
 
   return {
-    flags: 32768, // IS_COMPONENTS_V2
+    flags: 32768,
     components: [
       {
-        type: 17, // Container without accent_color (clean neutral border)
+        type: 17,
         components: containerComponents
       }
-    ],
-    files
+    ]
+  };
+}
+
+
+/**
+ * Builds the Session Info announcement card:
+ * Top banner (if set), session status text, and bottom banner (if set) - without extra buttons.
+ */
+export function buildSessionInfoCard(customizations = {}) {
+  const containerComponents = [];
+  const topBannerUrl = (customizations?.sessionShutdownBannerUrl && isValidHttpUrl(customizations.sessionShutdownBannerUrl))
+    ? customizations.sessionShutdownBannerUrl.trim()
+    : ((customizations?.sessionTopBannerUrl && isValidHttpUrl(customizations.sessionTopBannerUrl)) ? customizations.sessionTopBannerUrl.trim() : null);
+  const bottomBannerUrl = (customizations?.sessionShutdownBottomBannerUrl && isValidHttpUrl(customizations.sessionShutdownBottomBannerUrl))
+    ? customizations.sessionShutdownBottomBannerUrl.trim()
+    : ((customizations?.sessionBottomBannerUrl && isValidHttpUrl(customizations.sessionBottomBannerUrl)) ? customizations.sessionBottomBannerUrl.trim() : null);
+  const srvName = customizations?.serverName || 'Server';
+
+  if (topBannerUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [{ media: { url: topBannerUrl } }]
+    });
+  }
+
+  const title = customizations?.sessionShutdownTitle || `${srvName} Session Offline`;
+  const desc = customizations?.sessionShutdownDesc || 'No active session is currently in progress. Stay tuned for upcoming patrol announcements!';
+
+  containerComponents.push({
+    type: 10,
+    content: `### ${title}\n> ${desc}`
+  });
+
+  if (bottomBannerUrl) {
+    containerComponents.push({
+      type: 12,
+      items: [{ media: { url: bottomBannerUrl } }]
+    });
+  }
+
+  return {
+    flags: 32768,
+    components: [
+      {
+        type: 17,
+        components: containerComponents
+      }
+    ]
   };
 }
 
@@ -906,55 +1017,58 @@ export async function activateLiveSessionPanel(client, targetChannelId = null, b
  * with the vote banner at the top, without clutter.
  */
 export function buildHostVoteCompletedPayload(vote) {
-  const containerComponents = [
-    // 1. Top Banner Image
-    {
-      type: 12,
-      items: [
-        {
-          media: {
-            url: CONFIG.SESSION.VOTE_TOP_BANNER_URL
-          }
-        }
-      ]
-    },
-    // 2. Clean, professional Title & Description
-    {
-      type: 10,
-      content: [
-        '### Session Vote Completed — Action Required',
-        `> The session vote in **ERLCX** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n`,
-        'Choose an action below to proceed with the session startup:'
-      ].join('\n')
-    },
-    // 3. Action Row with buttons INSIDE the container
-    {
-      type: 1,
-      components: [
-        {
-          type: 2,
-          style: 3, // Success Green
-          label: 'Start Session',
-          custom_id: `vote_host_start_${vote.id}`
-        },
-        {
-          type: 2,
-          style: 2, // Secondary Gray
-          label: 'Postpone Session',
-          custom_id: `vote_host_postpone_${vote.id}`
-        }
-      ]
-    }
-  ];
+  const containerComponents = [];
+  const topBannerUrl = vote.topBannerUrl || vote.customizations?.sessionVoteTopBannerUrl || null;
+  const bottomBannerUrl = vote.bottomBannerUrl || vote.customizations?.sessionVoteBottomBannerUrl || null;
 
-  // 4. Bottom Banner Image
-  if (CONFIG.SESSION.VOTE_BOTTOM_BANNER_URL) {
+  if (topBannerUrl && typeof topBannerUrl === 'string' && topBannerUrl.trim()) {
     containerComponents.push({
       type: 12,
       items: [
         {
           media: {
-            url: CONFIG.SESSION.VOTE_BOTTOM_BANNER_URL
+            url: topBannerUrl.trim()
+          }
+        }
+      ]
+    });
+  }
+
+  const srv = vote.serverName || vote.customizations?.serverName || 'our community';
+  containerComponents.push({
+    type: 10,
+    content: [
+      '### Session Vote Completed | Action Required',
+      `> The session vote in **${srv}** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n`,
+      'Choose an action below to proceed with the session startup:'
+    ].join('\n')
+  });
+
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 3, // Success Green
+        label: 'Start Session',
+        custom_id: `vote_host_start_${vote.id}`
+      },
+      {
+        type: 2,
+        style: 2, // Secondary Gray
+        label: 'Postpone Session',
+        custom_id: `vote_host_postpone_${vote.id}`
+      }
+    ]
+  });
+
+  if (bottomBannerUrl && typeof bottomBannerUrl === 'string' && bottomBannerUrl.trim()) {
+    containerComponents.push({
+      type: 12,
+      items: [
+        {
+          media: {
+            url: bottomBannerUrl.trim()
           }
         }
       ]
@@ -962,10 +1076,10 @@ export function buildHostVoteCompletedPayload(vote) {
   }
 
   return {
-    flags: 32768, // IS_COMPONENTS_V2
+    flags: 32768,
     components: [
       {
-        type: 17, // Container without accent_color (clean neutral border)
+        type: 17,
         components: containerComponents
       }
     ]

@@ -585,7 +585,7 @@ export function buildModule2Modal(session) {
           .setLabel('Why Liberty County / ERLCX? (4 Sentences)') // 42 chars
           .setStyle(TextInputStyle.Paragraph)
           .setPlaceholder('Why choose Liberty County / ERLCX and what sets you apart')
-          .setValue(session.answers?.why_liberty || session.answers?.why_orlando || '')
+          .setValue(session.answers?.why_liberty || '')
           .setRequired(true)
       )
     );
@@ -956,7 +956,7 @@ export function buildStaffReviewCard(submission, page = 0) {
         ans.previous_history ? ans.previous_history.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
         '',
         `> **Why Liberty County / ERLCX Specifically?**`,
-        (ans.why_liberty || ans.why_orlando) ? (ans.why_liberty || ans.why_orlando).split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
+        ans.why_liberty ? ans.why_liberty.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
       ].join('\n');
     } else {
       pageContentText = [
