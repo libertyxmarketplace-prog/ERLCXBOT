@@ -654,33 +654,51 @@ export async function deployCommands(customToken = null, customClientId = null, 
   }
 
   const restClient = new REST({ version: '10' }).setToken(token);
-  const cmds = setupOnly ? configOnlyCommand : (isMaster ? masterCommands : customerCommands);
+  const isActuallyMaster = isMaster || (String(clientId) === String(process.env.CLIENT_ID));
+  const cmds = setupOnly ? configOnlyCommand : (isActuallyMaster ? masterCommands : customerCommands);
 
   try {
-    if (customGuildId && customGuildId.trim() !== '') {
-      // Clear global slash commands to prevent Discord from displaying duplicates
-      try {
+    if (isActuallyMaster) {
+      // Master Bot commands (/config, /banbot, /createbot, etc.)
+      if (customGuildId && customGuildId.trim() !== '') {
+        console.log(`[DEPLOY] Registering ${cmds.length} GUILD slash commands for Master Client: ${clientId} in Guild: ${customGuildId}...`);
+        await restClient.put(
+          Routes.applicationGuildCommands(clientId, customGuildId.trim()),
+          { body: cmds }
+        );
+        console.log(`[DEPLOY] Successfully registered ${cmds.length} guild slash commands for Master Client in Guild: ${customGuildId}!`);
+      } else {
+        console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Master Client: ${clientId}...`);
         await restClient.put(
           Routes.applicationCommands(clientId),
-          { body: [] }
+          { body: cmds }
         );
-      } catch {}
-
-      // Direct Guild Registration — INSTANTLY available in Discord UI for this server (0 delay)
-      console.log(`[DEPLOY] Registering ${cmds.length} GUILD commands for Client ${clientId} in Guild: ${customGuildId}...`);
-      await restClient.put(
-        Routes.applicationGuildCommands(clientId, customGuildId.trim()),
-        { body: cmds }
-      );
-      console.log(`[DEPLOY] Successfully deployed ${cmds.length} INSTANT guild commands in Guild: ${customGuildId}!`);
+        console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands for Master Client (zero duplicates)!`);
+      }
     } else {
-      // Global Slash Commands (visible across ALL servers)
-      console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Client: ${clientId}...`);
-      await restClient.put(
-        Routes.applicationCommands(clientId),
-        { body: cmds }
-      );
-      console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands across all servers!`);
+      if (customGuildId && customGuildId.trim() !== '') {
+        // Direct Guild Registration for customer bots — instant availability in their server
+        console.log(`[DEPLOY] Registering ${cmds.length} GUILD commands for Customer Client ${clientId} in Guild: ${customGuildId}...`);
+        await restClient.put(
+          Routes.applicationGuildCommands(clientId, customGuildId.trim()),
+          { body: cmds }
+        );
+        // Clear global commands for customer bot to prevent duplicate listings in Discord
+        try {
+          await restClient.put(
+            Routes.applicationCommands(clientId),
+            { body: [] }
+          );
+        } catch {}
+        console.log(`[DEPLOY] Successfully deployed ${cmds.length} INSTANT guild commands in Guild: ${customGuildId}!`);
+      } else {
+        console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Client: ${clientId}...`);
+        await restClient.put(
+          Routes.applicationCommands(clientId),
+          { body: cmds }
+        );
+        console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands across all servers!`);
+      }
     }
   } catch (error) {
     console.error('[DEPLOY] Error deploying slash commands:', error);
@@ -689,5 +707,10 @@ export async function deployCommands(customToken = null, customClientId = null, 
 
 // Auto-run if executed directly via `node deploy-commands.js`
 if (process.argv[1]?.endsWith('deploy-commands.js')) {
-  deployCommands(null, null, null, false, true);
+  (async () => {
+    await deployCommands(null, null, null, false, true);
+    if (process.env.GUILD_ID) {
+      await deployCommands(null, null, process.env.GUILD_ID, false, true);
+    }
+  })();
 }

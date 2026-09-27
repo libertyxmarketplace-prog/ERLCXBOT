@@ -100,10 +100,12 @@ export const CONFIG = {
 
   // Welcome System Configuration
   WELCOME: {
-    ENABLED: true, // Set to true (or use -welcome on / /welcome on) to re-enable
-    CHANNEL_ID: "1548147497854181397",
+    ENABLED: true, // Automatically sends 1 welcome card when a user joins
+    SEND_DM: true,
+    CHANNEL_ID: "1552529223460061284", // #𝖮𝗇𝖻𝗈𝖺𝗋𝖽𝗂𝗇𝗀
+    TICKET_CHANNEL_ID: "1552531450211991552", // #𝖭𝖾𝖾𝖽-𝗁𝖾𝗅𝗉
     NAVIGATE_CHANNEL_ID: "1544355964348801178",
-    WELCOME_EMOJI: "<:welcome:1548529700731752478>",
+    WELCOME_EMOJI: "<:Logo:1552544997612589056>",
     PEOPLE_EMOJI_ID: "1547025501703372820",
     PEOPLE_EMOJI_NAME: "People",
     SERVER_NAME: "ERLCX"

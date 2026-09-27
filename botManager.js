@@ -129,55 +129,26 @@ export const DEFAULT_CUSTOMIZATIONS = {
 };
 
 
-let _instancesCache = null;
+import { botDb } from './botDatabase.js';
 
 /**
  * Load all bot instances (cached in-memory for instant 0ms access)
  */
 export function loadBotInstances(forceReload = false) {
-  if (_instancesCache && !forceReload) {
-    return _instancesCache;
+  if (forceReload) {
+    botDb.init();
   }
-  try {
-    if (!fs.existsSync(INSTANCES_FILE)) {
-      const initial = {
-        [MASTER_BOT_ID]: {
-          botId: MASTER_BOT_ID,
-          ownerUserId: "OWNER",
-          token: MASTER_TOKEN,
-          erlcApiKey: "",
-          status: "unconfigured",
-          setupCompleted: false,
-          banned: false,
-          bannedReason: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          customizations: { ...DEFAULT_CUSTOMIZATIONS }
-        }
-      };
-      fs.writeFileSync(INSTANCES_FILE, JSON.stringify(initial, null, 2), 'utf-8');
-      _instancesCache = initial;
-      return initial;
-    }
-    const raw = fs.readFileSync(INSTANCES_FILE, 'utf-8');
-    _instancesCache = JSON.parse(raw);
-    return _instancesCache;
-  } catch (err) {
-    console.error("Error reading bot instances:", err);
-    return _instancesCache || {};
-  }
+  return botDb.getAll();
 }
 
 /**
- * Save all bot instances to disk and update memory cache
+ * Save all bot instances to disk and update memory cache with atomic persistence
  */
 export function saveBotInstances(instances) {
-  _instancesCache = instances;
-  try {
-    fs.writeFileSync(INSTANCES_FILE, JSON.stringify(instances, null, 2), 'utf-8');
-  } catch (err) {
-    console.error("Error saving bot instances:", err);
+  for (const [id, data] of Object.entries(instances)) {
+    botDb.cache.set(id, data);
   }
+  botDb.save();
 }
 
 /**
@@ -207,8 +178,8 @@ export function createBotInstance(ownerUserId, options = {}) {
     erlcApiKey: options.erlcApiKey || '',
     aiApiKey: options.aiApiKey || '',
     aiProvider: options.aiProvider || 'openai',
-    status: (options.token && options.erlcApiKey) ? 'active' : 'unconfigured',
-    setupCompleted: Boolean(options.token && options.erlcApiKey),
+    status: (options.token && options.token.trim().length > 0) ? 'active' : 'unconfigured',
+    setupCompleted: Boolean(options.token && options.token.trim().length > 0),
     banned: false,
     bannedReason: null,
     createdAt: new Date().toISOString(),
@@ -262,17 +233,25 @@ export function getBotInstance(botId) {
  */
 export function getBotInstanceForGuild(guildId, ownerUserId = null) {
   const instances = loadBotInstances();
-  // 1. Match by owner first
-  if (ownerUserId) {
+  // 1. Exact match by owner AND guild first
+  if (guildId && ownerUserId) {
     for (const bot of Object.values(instances)) {
-      if (bot.ownerUserId === ownerUserId) return bot;
+      if (bot.ownerUserId === ownerUserId && bot.guildId === guildId && !bot.banned) return bot;
     }
   }
   // 2. Exact match by guild
-  for (const bot of Object.values(instances)) {
-    if (bot.guildId === guildId && bot.botId !== MASTER_BOT_ID) return bot;
+  if (guildId) {
+    for (const bot of Object.values(instances)) {
+      if (bot.guildId === guildId && bot.botId !== MASTER_BOT_ID && !bot.banned) return bot;
+    }
   }
-  // 3. Fallback to Master
+  // 3. Match by owner
+  if (ownerUserId) {
+    for (const bot of Object.values(instances)) {
+      if (bot.ownerUserId === ownerUserId && bot.botId !== MASTER_BOT_ID && !bot.banned) return bot;
+    }
+  }
+  // 4. Fallback to Master
   return instances[MASTER_BOT_ID] || null;
 }
 
@@ -282,8 +261,30 @@ export function getBotInstanceForGuild(guildId, ownerUserId = null) {
 export function getOrCreateBotInstanceForUser(ownerUserId, guildId = null) {
   const instances = loadBotInstances();
   if (ownerUserId) {
+    if (guildId) {
+      for (const bot of Object.values(instances)) {
+        if (bot.ownerUserId === ownerUserId && bot.guildId === guildId && !bot.banned) {
+          return bot;
+        }
+      }
+    }
     for (const bot of Object.values(instances)) {
-      if (bot.ownerUserId === ownerUserId) return bot;
+      if (bot.ownerUserId === ownerUserId && !bot.banned) {
+        if (guildId && !bot.guildId) {
+          bot.guildId = guildId;
+          saveBotInstances(instances);
+        }
+        return bot;
+      }
+    }
+    for (const bot of Object.values(instances)) {
+      if (bot.ownerUserId === ownerUserId) {
+        if (guildId && !bot.guildId) {
+          bot.guildId = guildId;
+          saveBotInstances(instances);
+        }
+        return bot;
+      }
     }
   }
   return createBotInstance(ownerUserId, { guildId });
@@ -296,7 +297,23 @@ export function updateBotInstance(botId, updates) {
   const instances = loadBotInstances();
   const bot = getBotInstance(botId);
   const actualId = bot ? bot.botId : botId;
-  if (!instances[actualId]) return null;
+  if (!instances[actualId]) {
+    instances[actualId] = {
+      botId: actualId,
+      ownerUserId: 'UNASSIGNED',
+      token: '',
+      erlcApiKey: '',
+      aiApiKey: '',
+      aiProvider: 'openai',
+      status: 'unconfigured',
+      setupCompleted: false,
+      banned: false,
+      bannedReason: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      customizations: { ...DEFAULT_CUSTOMIZATIONS }
+    };
+  }
 
   instances[actualId] = {
     ...instances[actualId],
@@ -305,7 +322,7 @@ export function updateBotInstance(botId, updates) {
   };
 
   // Re-check setup completion
-  if (instances[actualId].token && instances[actualId].erlcApiKey) {
+  if (instances[actualId].token && instances[actualId].token.trim().length > 0) {
     instances[actualId].setupCompleted = true;
     if (instances[actualId].status === 'unconfigured') {
       instances[actualId].status = 'active';
@@ -328,7 +345,23 @@ export function updateBotCustomization(botId, key, value) {
   const instances = loadBotInstances();
   const bot = getBotInstance(botId);
   const actualId = bot ? bot.botId : botId;
-  if (!instances[actualId]) return null;
+  if (!instances[actualId]) {
+    instances[actualId] = {
+      botId: actualId,
+      ownerUserId: 'UNASSIGNED',
+      token: '',
+      erlcApiKey: '',
+      aiApiKey: '',
+      aiProvider: 'openai',
+      status: 'unconfigured',
+      setupCompleted: false,
+      banned: false,
+      bannedReason: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      customizations: { ...DEFAULT_CUSTOMIZATIONS }
+    };
+  }
 
   if (!instances[actualId].customizations) {
     instances[actualId].customizations = { ...DEFAULT_CUSTOMIZATIONS };

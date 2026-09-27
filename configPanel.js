@@ -8,7 +8,8 @@ import {
 } from 'discord.js';
 import { getBotInstance } from './botManager.js';
 import { AI_CAPABILITIES } from './aiConfigAssistant.js';
-import { getPanelBottomBanner, getConfigHeaderBanner } from './panelMenu.js';
+import { getPanelBottomBanner } from './panelMenu.js';
+import { activeCustomerClients } from './customerBotRunner.js';
 
 export const TOTAL_PAGES = 8;
 
@@ -59,30 +60,19 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
   const containerComponents = [];
   const files = [];
 
-  // Big, premium /CONFIG top header banner inside the container
-  const headerBanner = getConfigHeaderBanner();
-  if (headerBanner.mediaUrl) {
-    containerComponents.push({
-      type: 12,
-      items: [{ media: { url: headerBanner.mediaUrl } }]
-    });
-
-    if (includeAttachment && headerBanner.attachment) {
-      files.push(headerBanner.attachment);
-    }
-  }
-
   switch (activePage) {
     // ══════════════════════════════════════════════════════════════════════
     // PAGE 1: BOT SETUP (1/8)
     // ══════════════════════════════════════════════════════════════════════
     case 1: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
-      const joinCode = cust.joinCode || 'Auto-detected';
+      const srvName = cust.serverName?.trim() || '*Not Set*';
+      const joinCode = cust.joinCode?.trim() || '*Not Set*';
       const hasToken = Boolean(bot.token && bot.token.trim().length > 0);
       const hasApiKey = Boolean(bot.erlcApiKey && bot.erlcApiKey.trim().length > 0);
-      const staffRole = cust.botStaffRoleId ? `<@&${cust.botStaffRoleId}> ${statusBadge(true)}` : `*Admins Only* ${statusBadge(false)}`;
-      const botStatus = bot.banned ? 'Suspended' : (hasToken ? 'Active' : 'Unconfigured');
+      const isClientOnline = activeCustomerClients.has(botId);
+      const botStatus = bot.banned
+        ? 'Suspended'
+        : (isClientOnline ? 'Online' : (bot.status === 'invalid_token' ? 'Invalid Token' : (hasToken ? 'Active' : 'Unconfigured')));
 
       let discordBotId = bot.discordBotId || null;
       if (!discordBotId && hasToken) {
@@ -106,7 +96,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
         type: 10,
         content: [
           `# Server Configuration`,
-          `-# Manage settings, credentials, and access for **${srvName}** • Instance: \`${botId}\` • Page 1 of 8`,
+          `-# Manage settings, credentials, and in-game details • Instance: \`${botId}\` • Page 1 of 8`,
           ``,
           `> ### Core Authentication`,
           `> • **Bot Instance ID:** \`${botId}\``,
@@ -116,36 +106,45 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
           `> • **Instance Status:** \`${botStatus}\``,
           ``,
           `> ### In-Game Server Details`,
-          `> • **Community Name:** **${srvName}**`,
-          `> • **Server Join Code:** \`${joinCode}\``,
+          `> • **Community Name:** ${cust.serverName?.trim() ? `**${cust.serverName.trim()}**` : '*Not Set*'}`,
+          `> • **Server Join Code:** ${cust.joinCode?.trim() ? `\`${cust.joinCode.trim()}\`` : '*Not Set*'}`,
           ``,
-          `> ### Access & Permissions`,
-          `> • **Assigned Bot Owner:** ${ownerDisplay}`,
-          `> • **Authorized Staff Role:** ${staffRole}`,
-          `> • **Management Access:** ${cust.botStaffRoleId ? '`Restricted to Staff Role`' : '`Admins Only`'}`,
+          `> ### Bot Ownership`,
+          `> • **Assigned Owner:** ${ownerDisplay}`,
           ``,
-          `-# Select an action below to update credentials or configure management permissions.`
+          `-# Select an action below to update credentials or configure in-game server details.`
         ].join('\n')
       });
 
       containerComponents.push({ type: 14, divider: true, spacing: 1 });
 
+      const page1Buttons = [
+        {
+          type: 2,
+          style: 1,
+          label: 'Edit Credentials',
+          custom_id: `cfg_btn_creds_${botId}`
+        },
+        {
+          type: 2,
+          style: 2,
+          label: 'Server Details',
+          custom_id: `cfg_btn_servercore_${botId}`
+        }
+      ];
+
+      if (discordBotId) {
+        page1Buttons.push({
+          type: 2,
+          style: 5,
+          label: 'Invite Bot',
+          url: `https://discord.com/oauth2/authorize?client_id=${discordBotId}&permissions=8&scope=bot%20applications.commands`
+        });
+      }
+
       containerComponents.push({
         type: 1,
-        components: [
-          {
-            type: 2,
-            style: 1,
-            label: 'Edit Credentials',
-            custom_id: `cfg_btn_creds_${botId}`
-          },
-          {
-            type: 2,
-            style: 2,
-            label: 'Set Staff Role',
-            custom_id: `cfg_btn_staffrole_${botId}`
-          }
-        ]
+        components: page1Buttons
       });
       break;
     }
@@ -154,7 +153,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 2: TICKET CATEGORIES (2/8)
     // ══════════════════════════════════════════════════════════════════════
     case 2: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
       const defaultCategories = [
         { id: "cat_1", name: "General Support", spawnCategoryId: "", pingRoleId: "" },
         { id: "cat_2", name: "High Rank", spawnCategoryId: "", pingRoleId: "" },
@@ -235,7 +234,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 3: TICKET APPEARANCE & GUIDELINES (3/8)
     // ══════════════════════════════════════════════════════════════════════
     case 3: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
       const insideBanner = cust.ticketInsideBannerUrl ? `Configured ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
       const topBanner = cust.topBannerUrl ? `Configured ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
       const bottomBanner = cust.bottomBannerUrl ? `Configured ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
@@ -297,7 +296,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 4: SERVER SESSIONS (4/8)
     // ══════════════════════════════════════════════════════════════════════
     case 4: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
       const sessChannel = cust.sessionChannelId ? `<#${cust.sessionChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const ingameVc = cust.ingameVcId ? `<#${cust.ingameVcId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const queueVc = cust.queueVcId ? `<#${cust.queueVcId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
@@ -368,7 +367,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 5: STAFF APPLICATIONS (5/8)
     // ══════════════════════════════════════════════════════════════════════
     case 5: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
       const revChannel = cust.reviewChannelId ? `<#${cust.reviewChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const resChannel = cust.resultsChannelId ? `<#${cust.resultsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const isIngameOpen = cust.appIngameOpen !== false;
@@ -435,7 +434,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 6: STAFF DOCUMENTATION (6/8)
     // ══════════════════════════════════════════════════════════════════════
     case 6: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
       const staffChan = cust.staffDocsChannelId ? `<#${cust.staffDocsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const layoutMode = cust.staffDocsLayout === 'buttons' ? 'Interactive Buttons' : 'Dropdown Select Menu';
 
@@ -497,7 +496,8 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 7: STAFF MODERATION (7/8)
     // ══════════════════════════════════════════════════════════════════════
     case 7: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
+      const staffRole = cust.botStaffRoleId ? `<@&${cust.botStaffRoleId}> ${statusBadge(true)}` : `*Admins Only* ${statusBadge(false)}`;
       const infrChan = cust.infractionsChannelId ? `<#${cust.infractionsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const promChan = cust.promotionsChannelId ? `<#${cust.promotionsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
       const infrRole = cust.infractionStaffRoleId ? `<@&${cust.infractionStaffRoleId}> ${statusBadge(true)}` : `*None* ${statusBadge(false)}`;
@@ -506,11 +506,22 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
       const promBanner = cust.promoteBannerUrl ? `Custom ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
       const infrBanner = cust.infractBannerUrl ? `Custom ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
 
+      const welcomeChan = cust.welcomeChannelId ? `<#${cust.welcomeChannelId}> ${statusBadge(true)}` : `*Disabled / Not Set* ${statusBadge(false)}`;
+      const welcomeStatus = cust.welcomeEnabled && cust.welcomeChannelId ? `Enabled ${statusBadge(true)}` : `Disabled ${statusBadge(false)}`;
+
       containerComponents.push({
         type: 10,
         content: [
           `# Server Configuration`,
-          `-# Internal accountability, strikes, and rank advancements • Page 7 of 8`,
+          `-# Internal staff management, roles, and community settings • Page 7 of 8`,
+          ``,
+          `> ### Management & Staff Access`,
+          `> • **Authorized Staff Role:** ${staffRole}`,
+          `> • **Management Access:** ${cust.botStaffRoleId ? '`Restricted to Staff Role`' : '`Admins Only`'}`,
+          ``,
+          `> ### Welcome System`,
+          `> • **Welcome Channel:** ${welcomeChan}`,
+          `> • **Welcome Card Status:** ${welcomeStatus}`,
           ``,
           `> ### Promotion Announcements`,
           `> • **Public Promotions Channel:** ${promChan}`,
@@ -522,7 +533,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
           `> • **Authorized Disciplinary Role:** ${infrRole}`,
           `> • **Infraction Card Graphic:** ${infrBanner}`,
           ``,
-          `-# Select a moderation setting below to edit promotion or infraction settings.`
+          `-# Select a setting below to edit staff roles, welcome system, promotions, or infractions.`
         ].join('\n')
       });
 
@@ -532,10 +543,38 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
         type: 1,
         components: [
           {
+            type: 2,
+            style: 2,
+            label: 'Set Staff Role',
+            custom_id: `cfg_btn_staffrole_${botId}`
+          },
+          {
+            type: 2,
+            style: 2,
+            label: 'Welcome Settings',
+            custom_id: `cfg_btn_welcome_${botId}`
+          }
+        ]
+      });
+
+      containerComponents.push({
+        type: 1,
+        components: [
+          {
             type: 3,
             custom_id: `cfg_select_action_${botId}`,
-            placeholder: 'Choose a moderation setting to edit...',
+            placeholder: 'Choose a moderation or community setting to edit...',
             options: [
+              {
+                label: 'Staff Management Role',
+                value: 'edit_staffrole',
+                description: 'Set authorized staff role for bot management & commands'
+              },
+              {
+                label: 'Welcome System Settings',
+                value: 'edit_welcome',
+                description: 'Enable/disable welcome cards, set channel, text, and banner'
+              },
               {
                 label: 'Promotion Settings',
                 value: 'edit_promotions',
@@ -557,7 +596,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // PAGE 8: AI ASSISTANT (8/8)
     // ══════════════════════════════════════════════════════════════════════
     case 8: {
-      const srvName = cust.serverName || 'ERLCX (SOON)';
+      const srvName = cust.serverName?.trim() || 'Community Server';
       const activeAiProv = (cust.aiProvider || bot.aiProvider || 'openrouter').toUpperCase();
       const hasAiKey = Boolean(cust.aiApiKey || bot.aiApiKey);
       const activeModel = cust.aiModel || (activeAiProv === 'GEMINI' ? 'gemini-1.5-flash' : activeAiProv === 'GROQ' ? 'llama-3.3-70b' : 'gpt-4o-mini');
@@ -696,15 +735,50 @@ export function buildCredentialsModal(botId) {
 
   const apiKeyInput = new TextInputBuilder()
     .setCustomId('erlcApiKey')
-    .setLabel('ER:LC Server API Key (Required)')
+    .setLabel('ER:LC Server API Key (Optional)')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Paste your ER:LC Server API Key')
-    .setRequired(true);
+    .setPlaceholder('Paste your ER:LC Server API Key (Optional)')
+    .setRequired(false);
   if (bot?.erlcApiKey && bot.erlcApiKey.trim().length > 0) apiKeyInput.setValue(bot.erlcApiKey.trim());
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(tokenInput),
     new ActionRowBuilder().addComponents(apiKeyInput)
+  );
+
+  return modal;
+}
+
+/**
+ * Build Server Core & Join Code Modal (Page 1)
+ */
+export function buildServerCoreModal(botId) {
+  const bot = getBotInstance(botId);
+  const cust = bot?.customizations || {};
+
+  const modal = new ModalBuilder()
+    .setCustomId(`cfg_modal_servercore_${botId}`)
+    .setTitle('Server Identity & Join Code');
+
+  const nameInput = new TextInputBuilder()
+    .setCustomId('serverName')
+    .setLabel('In-Game Server Name')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g. Liberty County Roleplay')
+    .setRequired(false);
+  if (cust.serverName?.trim()) nameInput.setValue(cust.serverName.trim());
+
+  const joinInput = new TextInputBuilder()
+    .setCustomId('joinCode')
+    .setLabel('Server Join Code')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('e.g. LCRP')
+    .setRequired(false);
+  if (cust.joinCode?.trim()) joinInput.setValue(cust.joinCode.trim());
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nameInput),
+    new ActionRowBuilder().addComponents(joinInput)
   );
 
   return modal;
@@ -1496,3 +1570,48 @@ export function buildAskAiModal(botId) {
   modal.addComponents(new ActionRowBuilder().addComponents(promptInput));
   return modal;
 }
+
+/**
+ * Build Welcome System Modal
+ */
+export function buildWelcomeModal(botId) {
+  const bot = getBotInstance(botId);
+  const cust = bot?.customizations || {};
+
+  const modal = new ModalBuilder()
+    .setCustomId(`cfg_modal_welcome_${botId}`)
+    .setTitle('Welcome Settings');
+
+  const channelInput = new TextInputBuilder()
+    .setCustomId('welcomeChannelId')
+    .setLabel('Welcome Channel ID')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('Paste welcome channel ID')
+    .setRequired(false);
+  if (cust.welcomeChannelId?.trim()) channelInput.setValue(cust.welcomeChannelId.trim());
+
+  const bannerInput = new TextInputBuilder()
+    .setCustomId('welcomeBannerUrl')
+    .setLabel('Welcome Card Banner Image URL')
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder('https://... image link')
+    .setRequired(false);
+  if (cust.welcomeBannerUrl?.trim()) bannerInput.setValue(cust.welcomeBannerUrl.trim());
+
+  const textInput = new TextInputBuilder()
+    .setCustomId('welcomeText')
+    .setLabel('Welcome Message Text')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder('Welcome to {server}, {user}! Enjoy your stay.')
+    .setRequired(false);
+  if (cust.welcomeText?.trim()) textInput.setValue(cust.welcomeText.trim());
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(channelInput),
+    new ActionRowBuilder().addComponents(bannerInput),
+    new ActionRowBuilder().addComponents(textInput)
+  );
+
+  return modal;
+}
+
