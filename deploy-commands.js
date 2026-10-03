@@ -13,7 +13,7 @@ if (!DISCORD_TOKEN || !CLIENT_ID) {
 
 export const panelCommand = new SlashCommandBuilder()
   .setName('panel')
-  .setDescription('Open the unified ERLCX V2 Panel Menu to deploy server panels')
+  .setDescription('Open the unified LIBERTX V2 Panel Menu to deploy server panels')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addChannelOption(opt =>
     opt
@@ -27,7 +27,7 @@ const commands = [
   panelCommand,
   new SlashCommandBuilder()
     .setName('ticket')
-    .setDescription('ERLCX Ticket System management commands')
+    .setDescription('LIBERTX Ticket System management commands')
     .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages)
     // 1. /ticket close [reason]
     .addSubcommand(sub =>
@@ -330,7 +330,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName('application')
-    .setDescription('ERLCX Staff Application System')
+    .setDescription('LIBERTX Staff Application System')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
@@ -574,8 +574,8 @@ export const adminOnlyCommands = [
 // Feature commands for customer bots (NO banbot, NO createbot, etc.)
 export const customerCommands = commands;
 
-// Slim ERLCX-only commands: just /config, /banbot, and /createbot
-export const erlcxMasterCommands = [
+// Slim LIBERTX-only commands: just /config, /banbot, and /createbot
+export const libertyxMasterCommands = [
   new SlashCommandBuilder()
     .setName('config')
     .setDescription('Open the interactive bot configuration control panel')
@@ -641,7 +641,7 @@ export const configOnlyCommand = [
     )
 ].map(cmd => cmd.toJSON());
 
-// Master ERLCX bot commands: ONLY bot management and config (/listbots, /banbot, /unbanbot, /createbot, /config)
+// Master LIBERTX bot commands: ONLY bot management and config (/listbots, /banbot, /unbanbot, /createbot, /config)
 export const masterCommands = [...configOnlyCommand, ...adminOnlyCommands];
 
 export async function deployCommands(customToken = null, customClientId = null, customGuildId = null, setupOnly = false, isMaster = false) {
@@ -650,7 +650,7 @@ export async function deployCommands(customToken = null, customClientId = null, 
 
   if (!token || !clientId) {
     console.error("Missing DISCORD_TOKEN or CLIENT_ID!");
-    return;
+    throw new Error("Missing DISCORD_TOKEN or CLIENT_ID!");
   }
 
   const restClient = new REST({ version: '10' }).setToken(token);
@@ -661,18 +661,47 @@ export async function deployCommands(customToken = null, customClientId = null, 
     if (isActuallyMaster) {
       // Master Bot commands (/config, /banbot, /createbot, etc.)
       if (customGuildId && customGuildId.trim() !== '') {
-        console.log(`[DEPLOY] Registering ${cmds.length} GUILD slash commands for Master Client: ${clientId} in Guild: ${customGuildId}...`);
+        const targetGuild = customGuildId.trim();
+        console.log(`[DEPLOY] Registering ${cmds.length} GUILD slash commands for Master Client: ${clientId} in Guild: ${targetGuild}...`);
         await restClient.put(
-          Routes.applicationGuildCommands(clientId, customGuildId.trim()),
+          Routes.applicationGuildCommands(clientId, targetGuild),
           { body: cmds }
         );
-        console.log(`[DEPLOY] Successfully registered ${cmds.length} guild slash commands for Master Client in Guild: ${customGuildId}!`);
+
+        // Mirror into every other guild the bot is already in (instant availability everywhere)
+        let mirrorCount = 1;
+        try {
+          const botGuilds = await restClient.get(Routes.userGuilds());
+          for (const g of botGuilds) {
+            if (g.id === targetGuild) continue;
+            try {
+              await restClient.put(Routes.applicationGuildCommands(clientId, g.id), { body: cmds });
+              mirrorCount++;
+            } catch {}
+          }
+        } catch {}
+
+        // Clear GLOBAL commands — otherwise Discord lists every command twice (guild + global)
+        try {
+          await restClient.put(Routes.applicationCommands(clientId), { body: [] });
+        } catch {}
+
+        console.log(`[DEPLOY] Successfully registered ${cmds.length} guild slash commands in ${mirrorCount} guild(s) and cleared duplicate global commands.`);
       } else {
         console.log(`[DEPLOY] Registering ${cmds.length} GLOBAL slash commands for Master Client: ${clientId}...`);
         await restClient.put(
           Routes.applicationCommands(clientId),
           { body: cmds }
         );
+        // Clear guild duplicates in the configured GUILD_ID (if any) so nothing is listed twice
+        if (process.env.GUILD_ID && process.env.GUILD_ID.trim() !== '') {
+          try {
+            await restClient.put(
+              Routes.applicationGuildCommands(clientId, process.env.GUILD_ID.trim()),
+              { body: [] }
+            );
+          } catch {}
+        }
         console.log(`[DEPLOY] Successfully registered ${cmds.length} global slash commands for Master Client (zero duplicates)!`);
       }
     } else {
@@ -702,15 +731,16 @@ export async function deployCommands(customToken = null, customClientId = null, 
     }
   } catch (error) {
     console.error('[DEPLOY] Error deploying slash commands:', error);
+    throw error;
   }
 }
 
 // Auto-run if executed directly via `node deploy-commands.js`
+// Guild-first: register GUILD commands (instant) when GUILD_ID is set, otherwise fall back to global.
+// Never register both scopes at once — Discord would list every command twice.
 if (process.argv[1]?.endsWith('deploy-commands.js')) {
   (async () => {
-    await deployCommands(null, null, null, false, true);
-    if (process.env.GUILD_ID) {
-      await deployCommands(null, null, process.env.GUILD_ID, false, true);
-    }
+    const guildId = process.env.GUILD_ID && process.env.GUILD_ID.trim() !== '' ? process.env.GUILD_ID.trim() : null;
+    await deployCommands(null, null, guildId, false, true);
   })();
 }

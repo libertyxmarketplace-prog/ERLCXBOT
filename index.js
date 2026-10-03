@@ -17,6 +17,7 @@ import {
 } from 'discord.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import './server.js';
 import { CONFIG } from './config.js';
 import {
   loadBotInstances,
@@ -590,7 +591,7 @@ async function closeTicketWorkflow(channel, closedByUser, reasonOverride = null)
             `• **Duration:** ${durationStr}\n\n` +
             `*A complete transcript file has been archived and attached below for your records.*`
           )
-          .setFooter({ text: `${channel.guild?.name || 'ERLCX'} Support` })
+          .setFooter({ text: `${channel.guild?.name || 'LIBERTX'} Support` })
           .setTimestamp();
 
         const dmPayload = { embeds: [dmEmbed] };
@@ -620,7 +621,7 @@ async function closeTicketWorkflow(channel, closedByUser, reasonOverride = null)
 
 client.once(Events.ClientReady, async () => {
   console.log(`=============================================`);
-  console.log(` ERLCX Bot logged in as ${client.user.tag}`);
+  console.log(` LIBERTX Bot logged in as ${client.user.tag}`);
   console.log(` Loaded ${CONFIG.CATEGORIES.length} Support Categories`);
   console.log(`=============================================`);
 
@@ -630,12 +631,11 @@ client.once(Events.ClientReady, async () => {
   await ensureSessionOfflineState(client);
   await checkAndExpireLoas(client);
   try {
-    await deployCommands(process.env.DISCORD_TOKEN, client.user.id, null, false, true);
-    for (const guild of client.guilds.cache.values()) {
-      try {
-        await deployCommands(process.env.DISCORD_TOKEN, client.user.id, guild.id, false, true);
-      } catch {}
-    }
+    // Guild-first SINGLE deploy: registers GUILD commands (instant) in every guild the bot
+    // is in and clears global commands — never both scopes, so nothing is ever listed twice.
+    const guildList = [...client.guilds.cache.values()];
+    const primaryGuildId = (process.env.GUILD_ID && process.env.GUILD_ID.trim()) || guildList[0]?.id || null;
+    await deployCommands(process.env.DISCORD_TOKEN, client.user.id, primaryGuildId, false, true);
     console.log('[MASTER BOT] Master slash commands synced across all guilds with zero duplicates.');
   } catch (err) {
     console.warn('[MASTER BOT] Deploy commands error:', err.message);
@@ -743,7 +743,7 @@ client.on(Events.ChannelDelete, async channel => {
 // Deduplication set to guarantee zero duplicate welcome dispatches
 const welcomedMembers = new Set();
 
-// Master bot ERLCX welcome listener (dispatches beta tester welcome V2 panel)
+// Master bot LIBERTX welcome listener (dispatches beta tester welcome V2 panel)
 client.on(Events.GuildMemberAdd, async member => {
   try {
     if (!CONFIG.WELCOME?.ENABLED) return;
@@ -756,7 +756,7 @@ client.on(Events.GuildMemberAdd, async member => {
 
     const payload = buildBetaTesterWelcomePayload({
       userId: member.id,
-      serverName: member.guild?.name || CONFIG.WELCOME?.SERVER_NAME || 'ERLCX'
+      serverName: member.guild?.name || CONFIG.WELCOME?.SERVER_NAME || 'LIBERTX'
     });
 
     let sent = false;
@@ -857,18 +857,18 @@ export async function handleMessageCreate(message) {
       const targetUser = message.mentions.users.first() || message.author;
       const payload = buildBetaTesterWelcomePayload({
         userId: targetUser.id,
-        serverName: message.guild?.name || 'ERLCX'
+        serverName: message.guild?.name || 'LIBERTX'
       });
 
       if (args[0] === 'dm') {
-        await targetUser.send(payload).catch(() => null);
-        return sendCleanFeedback(`Beta tester welcome panel dispatched to <@${targetUser.id}> in DMs.`);
+        // DMs are permanently disabled for the beta panel — it is only ever posted in channels
+        await sendCleanFeedback('DMs are disabled for the beta tester panel. Posting it in this channel instead.');
       }
 
       await message.channel.send(payload).catch(async () => {
         const embedPayload = buildBetaTesterWelcomeEmbed({
           userId: targetUser.id,
-          serverName: message.guild?.name || 'ERLCX'
+          serverName: message.guild?.name || 'LIBERTX'
         });
         await message.channel.send(embedPayload).catch(() => null);
       });
@@ -1557,7 +1557,7 @@ export async function handleMessageCreate(message) {
       const fullArgs = args.join(' ').trim();
       if (!fullArgs || fullArgs.toLowerCase() === 'help') {
         const helpEmbed = new EmbedBuilder()
-          .setTitle('ERLCX | Leave of Absence (LOA) Format')
+          .setTitle('LIBERTX | Leave of Absence (LOA) Format')
           .setDescription(
             `> To submit an official Leave of Absence, please use the standard format:\n\n` +
             `\`-loa <Duration or End Date> | <Reason>\`\n\n` +
@@ -1568,7 +1568,7 @@ export async function handleMessageCreate(message) {
             `*Once submitted, your request will be dispatched to Staff Management in <#1548336007311527996> for review.*`
           )
           .setColor(0x0284c7)
-          .setFooter({ text: 'ERLCX Staff Administration • Leave System' });
+          .setFooter({ text: 'LIBERTX Staff Administration • Leave System' });
 
         return message.channel.send({ embeds: [helpEmbed] });
       }
@@ -1830,15 +1830,15 @@ setMessageHandler(handleMessageCreate);
 export async function handleInteraction(interaction) {
   try {
     /* ---------------------------------------------------------------------- */
-    /* MASTER BOT GUARD — ERLCX only handles /config, /banbot, /createbot     */
-    /* All other commands must be handled by the customer bot, not ERLCX.     */
+    /* MASTER BOT GUARD — LIBERTX only handles /config, /banbot, /createbot     */
+    /* All other commands must be handled by the customer bot, not LIBERTX.     */
     /* ---------------------------------------------------------------------- */
     const MASTER_CLIENT_ID = process.env.CLIENT_ID;
     const isMasterBot = interaction.applicationId === MASTER_CLIENT_ID || interaction.client.user.id === client.user.id;
     const MASTER_ONLY_COMMANDS = ['config', 'banbot', 'createbot', 'unbanbot', 'listbots', 'retrigger'];
 
     if (isMasterBot && interaction.isChatInputCommand() && !MASTER_ONLY_COMMANDS.includes(interaction.commandName)) {
-      // ERLCX is not supposed to respond to this command — silently ignore
+      // LIBERTX is not supposed to respond to this command — silently ignore
       return;
     }
 
@@ -1846,7 +1846,7 @@ export async function handleInteraction(interaction) {
     if (isMasterBot && (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu())) {
       const cid = interaction.customId || '';
       if (!cid.startsWith('cfg_')) {
-        return; // ERLCX ignores non-config UI interactions
+        return; // LIBERTX ignores non-config UI interactions
       }
     }
 
@@ -1880,7 +1880,7 @@ export async function handleInteraction(interaction) {
       if (interaction.commandName === 'config') {
         if (interaction.client.user.id !== client.user.id) {
           return interaction.reply({
-            content: `${EMOJIS.CROSS} The \`/config\` command is exclusively managed through the central ERLCX bot. Please invite and run \`/config\` from the official ERLCX bot.`,
+            content: `${EMOJIS.CROSS} /config is only available from the official LIBERTX bot. Please run it there.`,
             flags: 64
           });
         }
@@ -1916,7 +1916,7 @@ export async function handleInteraction(interaction) {
 
         if (!targetBot) {
           return sendConfigResponse({
-            content: `${EMOJIS.CROSS} Could not find bot instance with ID \`${requestedBotId}\`.`
+            content: `${EMOJIS.CROSS} Could not find a bot instance with ID **${requestedBotId}**.`
           }).catch(() => null);
         }
 
@@ -1926,7 +1926,7 @@ export async function handleInteraction(interaction) {
 
         if (requestedBotId && !isUserStaff && targetBot.ownerUserId !== interaction.user.id) {
           return sendConfigResponse({
-            content: `${EMOJIS.CROSS} You are not authorized to configure bot \`${requestedBotId}\`. Run \`/config\` without parameters to manage your own bot.`
+            content: `${EMOJIS.CROSS} You are not authorized to configure bot **${requestedBotId}**. Run /config without parameters to manage your own bot.`
           }).catch(() => null);
         }
 
@@ -4318,7 +4318,7 @@ export async function handleInteraction(interaction) {
             }
           )
           .setFooter({
-            text: 'ERLCX Management Desk • Official Report'
+            text: 'LIBERTX Management Desk • Official Report'
           })
           .setTimestamp();
 
@@ -5080,13 +5080,13 @@ export async function handleInteraction(interaction) {
           {
             type: 10,
             content:
-              `## ERLCX | Application Submitted\n` +
+              `## LIBERTX | Application Submitted\n` +
               `> Your **${roleName}** application has been transmitted to the Executive Team for review.\n\n` +
               `### Application Details\n` +
               `> • **Status:** Submitted & Pending Review\n` +
               `> • **Reference ID:** \`${submissionId.slice(0, 8).toUpperCase()}\`\n` +
               `> • **Notifications:** You will receive a direct message notification here once a decision has been reached.\n\n` +
-              `> *Inquiries regarding the status of your application will result in denial. Thank you for applying to ERLCX.*`
+              `> *Inquiries regarding the status of your application will result in denial. Thank you for applying to LIBERTX.*`
           }
         ];
 
@@ -5133,7 +5133,7 @@ export async function handleInteraction(interaction) {
                 {
                   type: 10,
                   content:
-                    `## ERLCX | Application Cancelled\n` +
+                    `## LIBERTX | Application Cancelled\n` +
                     `> Your staff application session has been cancelled.\n` +
                     `> You may start a new application at any time from the server panel.`
                 }
@@ -5595,7 +5595,7 @@ export async function handleInteraction(interaction) {
                 .setImage(CONFIG.SESSION.VOTE_TOP_BANNER_URL)
                 .setTitle('Session Vote Completed | Action Required')
                 .setDescription(
-                  `> The session vote in **ERLCX** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n\n` +
+                  `> The session vote in **LIBERTX** has reached its goal of **${vote.requiredVotes} votes** in <#${vote.channelId}>.\n\n` +
                   `Choose an action below to proceed with the session startup:`
                 );
               const fallbackRow = new ActionRowBuilder().addComponents(

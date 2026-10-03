@@ -25,7 +25,7 @@ const LOCAL_BANNER_PATH = path.join(__dirname, 'assets', 'bottom-banner.png');
  * @param {string} [options.userId] - Optional member ID to mention
  * @param {string} [options.serverName] - Server name
  */
-export function buildBetaTesterWelcomePayload({ userId = null, serverName = 'ERLCX' } = {}) {
+export function buildBetaTesterWelcomePayload({ userId = null, serverName = 'LIBERTX' } = {}) {
   const containerComponents = [];
   const files = [];
 
@@ -36,7 +36,9 @@ export function buildBetaTesterWelcomePayload({ userId = null, serverName = 'ERL
     type: 10,
     content: [
       `# <:Logo:1552544997612589056> Welcome to ${serverName}`,
-      `-# Thank you for joining ${mention}! Exclusive private beta testing program`
+      userId
+        ? `-# Thank you for joining ${mention}! Exclusive private beta testing program`
+        : '-# Exclusive private beta testing program'
     ].join('\n')
   });
 
@@ -123,7 +125,7 @@ export function buildBetaTesterWelcomePayload({ userId = null, serverName = 'ERL
  * @param {string} [options.userId] - Optional member ID to mention
  * @param {string} [options.serverName] - Server name
  */
-export function buildBetaTesterWelcomeEmbed({ userId = null, serverName = 'ERLCX' } = {}) {
+export function buildBetaTesterWelcomeEmbed({ userId = null, serverName = 'LIBERTX' } = {}) {
   const mention = userId ? `<@${userId}>` : 'there';
   const files = [];
 
@@ -131,7 +133,9 @@ export function buildBetaTesterWelcomeEmbed({ userId = null, serverName = 'ERLCX
     .setColor(0x0a84fd)
     .setTitle(`Welcome to ${serverName}`)
     .setDescription([
-      `-# Thank you for joining ${mention}! Exclusive private beta testing program`,
+      userId
+        ? `-# Thank you for joining ${mention}! Exclusive private beta testing program`
+        : '-# Exclusive private beta testing program',
       ``,
       `> We are actively onboarding private beta testers to help test and polish our new Discord bot and automated systems before public release.`,
       `> In exchange for your time, active feedback, and bug reports, you will receive **3 Months of Free Premium**.`,

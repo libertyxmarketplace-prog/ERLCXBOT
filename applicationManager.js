@@ -199,10 +199,10 @@ export function buildApplicationPanel(customConfig = null) {
   }
 
   // 2. Title and Clean Content (No Emojis)
-  const appTitle = customConfig?.appTitle || 'ERLCX | Staff Application';
+  const appTitle = customConfig?.appTitle || 'LIBERTX | Staff Application';
   const appDesc = customConfig?.appDescription ||
-    `> Welcome to the official ERLCX Staff Application portal.\n` +
-    `> Holding a staff position is a privilege that requires consistent activity, professionalism, and accountability. As a staff member, you represent ERLCX at all times.\n\n` +
+    `> Welcome to the official LIBERTX Staff Application portal.\n` +
+    `> Holding a staff position is a privilege that requires consistent activity, professionalism, and accountability. As a staff member, you represent LIBERTX at all times.\n\n` +
     `### Application Requirements\n` +
     `> • Must be at least 14 years of age.\n` +
     `> • Discord and Roblox accounts must be at least 30 days old.\n` +
@@ -323,8 +323,8 @@ export function buildApplicationHubMessage(session) {
   containerComponents.push({
     type: 10,
     content:
-      `## ERLCX | ${roleName} Application\n` +
-      `> Welcome to the official **ERLCX Staff Application**.\n` +
+      `## LIBERTX | ${roleName} Application\n` +
+      `> Welcome to the official **LIBERTX Staff Application**.\n` +
       `> Holding a staff position is a privilege requiring consistent activity and professionalism.\n\n` +
       `### Module Progress\n` +
       `> 1. Rules & Requirements: **${mod1Done ? 'Completed' : 'Ready'}**\n` +
@@ -582,9 +582,9 @@ export function buildModule2Modal(session) {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('why_liberty')
-          .setLabel('Why Liberty County / ERLCX? (4 Sentences)') // 42 chars
+          .setLabel('Why Liberty County / LIBERTX? (4 Sentences)') // 42 chars
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Why choose Liberty County / ERLCX and what sets you apart')
+          .setPlaceholder('Why choose Liberty County / LIBERTX and what sets you apart')
           .setValue(session.answers?.why_liberty || '')
           .setRequired(true)
       )
@@ -594,9 +594,9 @@ export function buildModule2Modal(session) {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('motivation')
-          .setLabel('Motivation for ERLCX Staff (3 Sentences)') // 40 chars
+          .setLabel('Motivation for LIBERTX Staff (3 Sentences)') // 40 chars
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder('Why you want to moderate ERLCX Discord')
+          .setPlaceholder('Why you want to moderate LIBERTX Discord')
           .setValue(session.answers?.motivation || '')
           .setRequired(true)
       ),
@@ -955,13 +955,13 @@ export function buildStaffReviewCard(submission, page = 0) {
         `> **Previous Moderation History**`,
         ans.previous_history ? ans.previous_history.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
         '',
-        `> **Why Liberty County / ERLCX Specifically?**`,
+        `> **Why Liberty County / LIBERTX Specifically?**`,
         ans.why_liberty ? ans.why_liberty.split('\n').map(l => `> ${l}`).join('\n') : '> N/A'
       ].join('\n');
     } else {
       pageContentText = [
         `### Page 2 of 4 • Motivation & Discord History`,
-        `> **Motivation for ERLCX Staff**`,
+        `> **Motivation for LIBERTX Staff**`,
         ans.motivation ? ans.motivation.split('\n').map(l => `> ${l}`).join('\n') : '> N/A',
         '',
         `> **Previous Discord Experience & Bot Knowledge**`,
@@ -1074,7 +1074,7 @@ export function buildStaffReviewCard(submission, page = 0) {
     {
       type: 10,
       content:
-        `## ERLCX | Staff Application Review\n` +
+        `## LIBERTX | Staff Application Review\n` +
         `> Official Staff Evaluation & Confidential Candidate Dossier • **${roleName}**`
     },
     // 3. Candidate Section with Status Pill
@@ -1170,7 +1170,7 @@ export function buildStaffReviewCard(submission, page = 0) {
   // 8. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Administration • Confidential Dossier #${submission.id.slice(0, 8).toUpperCase()}`
+    content: `-# LIBERTX Staff Administration • Confidential Dossier #${submission.id.slice(0, 8).toUpperCase()}`
   });
 
   const bottomBanner = getBottomBannerAttachment();
@@ -1238,10 +1238,10 @@ export function buildApplicationResultV2(submission) {
     {
       type: 10,
       content:
-        `## ERLCX | Staff Application Result\n` +
+        `## LIBERTX | Staff Application Result\n` +
         (isApproved
-          ? `> Please join us in welcoming our newest staff member to the **ERLCX** team!\n`
-          : `> Thank you to all candidates who applied for the **ERLCX** staff team.\n`)
+          ? `> Please join us in welcoming our newest staff member to the **LIBERTX** team!\n`
+          : `> Thank you to all candidates who applied for the **LIBERTX** staff team.\n`)
     },
     // 3. Candidate Section with Status Pill
     {
@@ -1327,7 +1327,7 @@ export function buildApplicationResultV2(submission) {
   // 7. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Administration • Official Application Result`
+    content: `-# LIBERTX Staff Administration • Official Application Result`
   });
 
   const bottomBanner = getBottomBannerAttachment();
@@ -1375,11 +1375,11 @@ export function buildApplicationResultFallback(submission) {
 
   const embed = new EmbedBuilder()
     .setColor(isApproved ? 0x2ecc71 : 0xe74c3c)
-    .setTitle(`ERLCX | Staff Application Result`)
+    .setTitle(`LIBERTX | Staff Application Result`)
     .setDescription(
       (isApproved
-        ? `> Please join us in welcoming our newest staff member to the **ERLCX** team!\n\n`
-        : `> Thank you to all candidates who applied for the **ERLCX** staff team.\n\n`) +
+        ? `> Please join us in welcoming our newest staff member to the **LIBERTX** team!\n\n`
+        : `> Thank you to all candidates who applied for the **LIBERTX** staff team.\n\n`) +
       `**Applicant:** <@${submission.userId}> (\`${submission.userTag || submission.userId}\`)\n` +
       `**Position:** **${roleName}**\n` +
       `**Decision:** **${isApproved ? 'Accepted' : 'Denied'}**\n` +
@@ -1392,7 +1392,7 @@ export function buildApplicationResultFallback(submission) {
         : `> You may reapply during our next staff application cycle.`)
     )
     .setImage('attachment://applications_banner.png')
-    .setFooter({ text: 'ERLCX Staff Administration' })
+    .setFooter({ text: 'LIBERTX Staff Administration' })
     .setTimestamp();
 
   const components = [];
@@ -1450,7 +1450,7 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
     {
       type: 10,
       content:
-        `## ERLCX | Application Status\n` +
+        `## LIBERTX | Application Status\n` +
         (isApproved
           ? `> Congratulations <@${userId}>! Your staff application for **${roleName}** has been **Accepted**.\n\n` +
             `### Application Summary\n` +
@@ -1461,7 +1461,7 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
             (notes ? `> • **Staff Notes:** ${notes}\n\n` : '\n') +
             `### Next Steps & Staff Training\n` +
             `> Please open a ticket in <#1548146597743960146> to claim your in-game & Discord staff roles and schedule your staff orientation & training session.\n\n` +
-            `> *Welcome to the ERLCX Staff Team.*`
+            `> *Welcome to the LIBERTX Staff Team.*`
           : `> Hello <@${userId}>, thank you for taking the time to apply for **${roleName}**.\n` +
             `> After review by Leadership, your staff application has been **Denied** at this time.\n\n` +
             `### Application Summary\n` +
@@ -1479,8 +1479,8 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
         {
           type: 10,
           content: isApproved
-            ? '**Executive Decision**\n-# Verified and accepted by ERLCX Leadership.'
-            : '**Executive Decision**\n-# Reviewed and closed by ERLCX Leadership.'
+            ? '**Executive Decision**\n-# Verified and accepted by LIBERTX Leadership.'
+            : '**Executive Decision**\n-# Reviewed and closed by LIBERTX Leadership.'
         }
       ],
       accessory: {
@@ -1537,7 +1537,7 @@ export function buildApplicationStatusDmV2({ status, role, notes, userId, review
     // 5. Micro Footer
     {
       type: 10,
-      content: `-# ERLCX Staff Management • Official Status Notification`
+      content: `-# LIBERTX Staff Management • Official Status Notification`
     }
   ];
 

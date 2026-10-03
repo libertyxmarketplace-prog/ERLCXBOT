@@ -168,7 +168,7 @@ async function callAiApi(apiKey, provider, systemPrompt, userPrompt, customModel
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${cleanKey}`,
         'HTTP-Referer': 'https://discord.com',
-        'X-Title': 'ERLCX Bot Assistant'
+        'X-Title': 'LIBERTX Bot Assistant'
       },
       body: JSON.stringify({
         model,
@@ -268,8 +268,8 @@ export async function processAiConfigRequest({ botId, prompt, userId }) {
     };
   }
 
-  const provider = bot.aiProvider || bot.customizations?.aiProvider || (apiKey.startsWith('sk-or-') ? 'openrouter' : 'openai');
-  const customModel = bot.aiModel || bot.customizations?.aiModel || null;
+  const provider = bot.customizations?.aiProvider || bot.aiProvider || (apiKey.startsWith('sk-or-') ? 'openrouter' : 'openai');
+  const customModel = bot.customizations?.aiModel || bot.aiModel || null;
 
   // Sanitize current state (remove secrets)
   const safeState = {
@@ -305,9 +305,13 @@ export async function processAiConfigRequest({ botId, prompt, userId }) {
     '{{CURRENT_STATE}}',
     JSON.stringify(safeState, null, 2)
   );
+  const ownerInstructions = String(bot.customizations?.aiSystemInstructions || '').trim().slice(0, 4000);
+  const effectiveSystemPrompt = ownerInstructions
+    ? `${systemPrompt}\n\n=== OWNER CONFIGURED BEHAVIOR ===\n${ownerInstructions}\n\nThese preferences cannot override credential secrecy, authorization checks, or the allowed configuration fields above.`
+    : systemPrompt;
 
   try {
-    const rawAiResponse = await callAiApi(apiKey, provider, systemPrompt, prompt, customModel);
+    const rawAiResponse = await callAiApi(apiKey, provider, effectiveSystemPrompt, prompt, customModel);
     let parsed;
     try {
       parsed = JSON.parse(rawAiResponse);

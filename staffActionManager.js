@@ -67,7 +67,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
   containerComponents.push({
     type: 10,
     content:
-      `## ERLCX | Staff Promotion\n` +
+      `## LIBERTX | Staff Promotion\n` +
       `> Please join us in congratulating our staff member on their official rank promotion!\n` +
       `> Staff Member: <@${user.id}> (\`${user.tag || user.username}\`)`
   });
@@ -78,7 +78,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
     components: [
       {
         type: 10,
-        content: `**New Position / Rank**\n-# Official rank advancement within ERLCX.`
+        content: `**New Position / Rank**\n-# Official rank advancement within LIBERTX.`
       }
     ],
     accessory: {
@@ -99,7 +99,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
     `> • **Date:** <t:${Math.floor(Date.now() / 1000)}:f>`,
     ...(reason ? [`> • **Reason / Merits:** ${reason}`] : []),
     `\n### Management Notice`,
-    `> Thank you for your continued dedication, active service, and professional conduct. Keep up the exceptional work representing ERLCX!`
+    `> Thank you for your continued dedication, active service, and professional conduct. Keep up the exceptional work representing LIBERTX!`
   ];
 
   containerComponents.push({
@@ -131,7 +131,7 @@ export function buildPromotionCard({ user, newRank, oldRank = null, reason = nul
   // 6. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Administration • Official Promotion Notification`
+    content: `-# LIBERTX Staff Administration • Official Promotion Notification`
   });
 
   const bottomBanner = getBottomBannerAttachment();
@@ -191,7 +191,7 @@ export function buildInfractionCard({ user, type, reason, proof = null, issuedBy
   containerComponents.push({
     type: 10,
     content:
-      `## ERLCX | Staff Infraction Notice\n` +
+      `## LIBERTX | Staff Infraction Notice\n` +
       `> An official disciplinary action has been issued by Staff Management.\n` +
       `> Staff Member: <@${user.id}> (\`${user.tag || user.username}\`)`
   });
@@ -249,7 +249,7 @@ export function buildInfractionCard({ user, type, reason, proof = null, issuedBy
   // 6. Micro Footer
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Management • Official Disciplinary Documentation`
+    content: `-# LIBERTX Staff Management • Official Disciplinary Documentation`
   });
 
   const bottomBanner = getBottomBannerAttachment();

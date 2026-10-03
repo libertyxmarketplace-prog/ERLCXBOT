@@ -120,7 +120,7 @@ export function buildLoaSubmissionCard(record) {
   containerComponents.push({
     type: 10,
     content:
-      `## ERLCX | Leave of Absence Request\n` +
+      `## LIBERTX | Leave of Absence Request\n` +
       `> A staff member has submitted an official Leave of Absence request for management review.\n` +
       `> Staff Member: <@${record.userId}> (\`${record.userTag}\`)`
   });
@@ -191,7 +191,7 @@ export function buildLoaSubmissionCard(record) {
 
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Administration • Leave Management System`
+    content: `-# LIBERTX Staff Administration • Leave Management System`
   });
 
   return {
@@ -258,7 +258,7 @@ export function buildLoaStatusDm({ record, status, notes = null }) {
 
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Management • Official Status Notification`
+    content: `-# LIBERTX Staff Management • Official Status Notification`
   });
 
   return {
@@ -305,7 +305,7 @@ export function buildLoaExpiredDm(record) {
     type: 10,
     content:
       `## Leave of Absence Concluded\n` +
-      `> Your scheduled Leave of Absence in **ERLCX** has officially ended.\n\n` +
+      `> Your scheduled Leave of Absence in **LIBERTX** has officially ended.\n\n` +
       `### Return to Active Service\n` +
       `> • **Nickname:** Your server nickname has been restored to normal.\n` +
       `> • **Activity Requirements:** You are now expected to resume full moderation activity and attendance at official sessions.\n\n` +
@@ -314,7 +314,7 @@ export function buildLoaExpiredDm(record) {
 
   containerComponents.push({
     type: 10,
-    content: `-# ERLCX Staff Administration • Leave of Absence System`
+    content: `-# LIBERTX Staff Administration • Leave of Absence System`
   });
 
   return {

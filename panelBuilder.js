@@ -177,8 +177,8 @@ export function buildTrainingTicketControl(ticketData) {
     {
       type: 10,
       content:
-        `## ERLCX Support | Staff Training & Onboarding\n` +
-        `> Welcome <@${ticketData.authorId}> to the **ERLCX** staff team!\n` +
+        `## LIBERTX Support | Staff Training & Onboarding\n` +
+        `> Welcome <@${ticketData.authorId}> to the **LIBERTX** staff team!\n` +
         `> This private onboarding channel has been prepared for your staff orientation and in-game training.`
     },
     // 3. Section with Green Accepted Status Pill
@@ -292,7 +292,7 @@ export function buildTicketControl(ticketData, customConfig = null) {
   const reasonText = ticketData.reason ? ticketData.reason : '*No reason provided.*';
 
   const categoryName = ticketData.categoryLabel || 'Support';
-  const serverName = customConfig?.serverName || 'ERLCX';
+  const serverName = customConfig?.serverName || 'LIBERTX';
   const welcomeText = customConfig?.ticketOpenMessage ||
     `Welcome <@${ticketData.authorId}>. Our support team has been notified.\nPlease provide all relevant details regarding your inquiry while a staff member responds.`;
 
@@ -470,7 +470,7 @@ export function buildTranscriptLogEmbed({
       }
     )
     .setFooter({
-      text: `ERLCX Support Desk • ID: ${channelId}`
+      text: `LIBERTX Support Desk • ID: ${channelId}`
     })
     .setTimestamp();
 

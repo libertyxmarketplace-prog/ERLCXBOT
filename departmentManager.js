@@ -111,7 +111,7 @@ export function buildHeaderPayload(customConfig = null) {
     type: 10,
     content:
       `## Departments\n` +
-      `ERLCX currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      `LIBERTX currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
       overviewList
   });
 
@@ -130,7 +130,7 @@ export function buildHeaderPayload(customConfig = null) {
     .setColor(0x0a84fd)
     .setTitle('Departments')
     .setDescription(
-      `ERLCX currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
+      `LIBERTX currently has a total of ${deptCount} legitimate departments at the moment which serve crucial parts of this community. You can view the variety of departments we have down below.\n\n` +
       overviewList
     );
 
@@ -254,7 +254,7 @@ export function buildDepartmentDmPayload(dept) {
     type: 10,
     content:
       `## ${dept.emoji} ${dept.name}\n` +
-      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent ERLCX.\n\n` +
+      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent LIBERTX.\n\n` +
       `### Quick Department Details\n` +
       `> • **Jurisdiction:** ${dept.jurisdiction}\n` +
       `> • **Status:** Open & Recruiting\n\n` +
@@ -291,7 +291,7 @@ export function buildDepartmentDmPayload(dept) {
     .setTitle(`${dept.name}`)
     .setDescription(
       `### ${dept.emoji} ${dept.name}\n` +
-      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent ERLCX.\n\n` +
+      `> Welcome to **${dept.name}**! We are actively seeking dedicated individuals to join our agency and represent LIBERTX.\n\n` +
       `### Quick Department Details\n` +
       `> • **Jurisdiction:** ${dept.jurisdiction}\n` +
       `> • **Status:** Open & Recruiting\n\n` +

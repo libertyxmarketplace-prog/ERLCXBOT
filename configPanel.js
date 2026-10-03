@@ -13,6 +13,18 @@ import { activeCustomerClients } from './customerBotRunner.js';
 
 export const TOTAL_PAGES = 8;
 
+// Human-friendly page map used by the "Jump to page" dropdown
+const PAGE_OPTIONS = [
+  { page: 1, label: '1 · Credentials & Setup', description: 'Token, API key, server details' },
+  { page: 2, label: '2 · Ticket Categories', description: 'Names, spawn channels, ping roles' },
+  { page: 3, label: '3 · Ticket Appearance', description: 'Panel text, banners, rules' },
+  { page: 4, label: '4 · Live Sessions', description: 'Channels, roles, session banners' },
+  { page: 5, label: '5 · Staff Applications', description: 'Review channels and questions' },
+  { page: 6, label: '6 · Staff Documentation', description: 'Handbooks, layout, banners' },
+  { page: 7, label: '7 · Staff & Community', description: 'Roles, welcome, promotions, logs' },
+  { page: 8, label: '8 · AI Assistant', description: 'API key and smart setup' }
+];
+
 export const EMOJIS = {
   CHECK: '<:checkmark:1552901024400932894>',
   CROSS: '<:xmark:1552901454098989056>',
@@ -32,6 +44,11 @@ function statusBadge(isConfigured) {
   return isConfigured ? EMOJIS.CHECK : EMOJIS.CROSS;
 }
 
+// Clean "✅ Configured" / "❌ Not set" text — no backticks, no clutter
+function statusText(isConfigured, yesLabel = 'Configured', noLabel = 'Not set') {
+  return isConfigured ? `${EMOJIS.CHECK} ${yesLabel}` : `${EMOJIS.CROSS} ${noLabel}`;
+}
+
 /**
  * Build the interactive /config control panel payload using Discord Components V2 Container (type 17)
  */
@@ -46,7 +63,7 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
           components: [
             {
               type: 10,
-              content: `# Error\n> ${EMOJIS.CROSS} Bot instance not found (\`${botId}\`).`
+              content: `# ❌ Bot Not Found\n-# No instance matches **${botId}**. Run /config again with a valid Bot ID.`
             }
           ]
         }
@@ -85,34 +102,33 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
       }
 
       const discordBotDisplay = discordBotId
-        ? `<@${discordBotId}> (\`${discordBotId}\`)`
-        : (hasToken ? '`Linked Client`' : `${statusBadge(false)} \`Not Configured\``);
+        ? `<@${discordBotId}>`
+        : (hasToken ? 'Token linked' : 'Not linked');
 
       const ownerDisplay = (bot.ownerUserId && bot.ownerUserId !== 'OWNER')
-        ? `<@${bot.ownerUserId}> (\`${bot.ownerUserId}\`)`
-        : '`Administrator`';
+        ? `<@${bot.ownerUserId}>`
+        : 'Server administrators';
 
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Manage settings, credentials, and in-game details • Instance: \`${botId}\` • Page 1 of 8`,
+          `# ⚙️ Credentials & Setup`,
+          `-# Page 1 of 8 • Instance ${botId}`,
           ``,
-          `> ### Core Authentication`,
-          `> • **Bot Instance ID:** \`${botId}\``,
-          `> • **Discord Bot ID:** ${discordBotDisplay}`,
-          `> • **Discord Bot Token:** ${statusBadge(hasToken)} ${hasToken ? '`Configured`' : '`Not Configured`'}`,
-          `> • **ER:LC Server API Key:** ${statusBadge(hasApiKey)} ${hasApiKey ? '`Configured`' : '`Not Configured`'}`,
-          `> • **Instance Status:** \`${botStatus}\``,
+          `### Connection`,
+          `**Discord Bot:** ${discordBotDisplay}`,
+          `**Bot Token:** ${statusText(hasToken)}`,
+          `**ER:LC API Key:** ${statusText(hasApiKey)}`,
+          `**Status:** ${botStatus}`,
           ``,
-          `> ### In-Game Server Details`,
-          `> • **Community Name:** ${cust.serverName?.trim() ? `**${cust.serverName.trim()}**` : '*Not Set*'}`,
-          `> • **Server Join Code:** ${cust.joinCode?.trim() ? `\`${cust.joinCode.trim()}\`` : '*Not Set*'}`,
+          `### In-Game Server`,
+          `**Community Name:** ${cust.serverName?.trim() || 'Not set'}`,
+          `**Join Code:** ${cust.joinCode?.trim() || 'Not set'}`,
           ``,
-          `> ### Bot Ownership`,
-          `> • **Assigned Owner:** ${ownerDisplay}`,
+          `### Ownership`,
+          `**Assigned Owner:** ${ownerDisplay}`,
           ``,
-          `-# Select an action below to update credentials or configure in-game server details.`
+          `-# Use the buttons below to edit credentials and server details.`
         ].join('\n')
       });
 
@@ -166,30 +182,30 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
         : defaultCategories;
 
       const catBullets = categories.map((c, i) => {
-        const isComplete = Boolean(c.name && c.spawnCategoryId);
-        const name = c.name ? `**${c.name}**` : `*Slot ${i + 1} (Empty)*`;
-        const spawn = c.spawnCategoryId ? `<#${c.spawnCategoryId}>` : '`Root Category`';
-        const ping = c.pingRoleId ? `<@&${c.pingRoleId}>` : '`None`';
-        return `> • **Slot ${i + 1}:** ${name} ${statusBadge(isComplete)}\n>   ↳ Spawn: ${spawn} | Ping: ${ping}`;
+        const n = i + 1;
+        const name = c.name || `Slot ${n}`;
+        if (!c.spawnCategoryId) return `**${n}. ${name}** — ${EMOJIS.CROSS} Not set up`;
+        const ping = c.pingRoleId ? ` • ping <@&${c.pingRoleId}>` : '';
+        return `**${n}. ${name}** — ${EMOJIS.CHECK} <#${c.spawnCategoryId}>${ping}`;
       }).join('\n');
 
-      const transChannel = cust.transcriptsChannelId ? `<#${cust.transcriptsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const claimRole = cust.ticketClaimRoleId ? `<@&${cust.ticketClaimRoleId}> ${statusBadge(true)}` : `*Default Staff* ${statusBadge(false)}`;
+      const transChannel = cust.transcriptsChannelId ? `${EMOJIS.CHECK} <#${cust.transcriptsChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const claimRole = cust.ticketClaimRoleId ? `${EMOJIS.CHECK} <@&${cust.ticketClaimRoleId}>` : `${EMOJIS.CROSS} Default staff`;
 
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Support channels, category assignment, and alerts • Page 2 of 8`,
+          `# 🎫 Ticket Categories`,
+          `-# Page 2 of 8 • Instance ${botId}`,
           ``,
-          `> ### Category Routing`,
+          `### Categories`,
           catBullets,
           ``,
-          `> ### System Archiving & Claims`,
-          `> • **Transcripts Channel:** ${transChannel}`,
-          `> • **Allowed Claim Role:** ${claimRole}`,
+          `### Archiving`,
+          `**Transcripts:** ${transChannel}`,
+          `**Claim Role:** ${claimRole}`,
           ``,
-          `-# Select a category setting below to edit names, spawn channels, or ping roles.`
+          `-# Use the dropdown below to edit names, spawns, or ping roles.`
         ].join('\n')
       });
 
@@ -235,33 +251,31 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // ══════════════════════════════════════════════════════════════════════
     case 3: {
       const srvName = cust.serverName?.trim() || 'Community Server';
-      const insideBanner = cust.ticketInsideBannerUrl ? `Configured ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
-      const topBanner = cust.topBannerUrl ? `Configured ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
-      const bottomBanner = cust.bottomBannerUrl ? `Configured ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
-      const openGreeting = cust.ticketOpenMessage ? `"${cust.ticketOpenMessage.slice(0, 50)}..."` : 'Default Support Welcome';
+      const insideBanner = cust.ticketInsideBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const topBanner = cust.topBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const bottomBanner = cust.bottomBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const openGreeting = cust.ticketOpenMessage ? `"${cust.ticketOpenMessage.slice(0, 50)}..."` : 'Default support welcome';
       const showRules = cust.showRulesButton !== false;
 
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Ticket embed styling, branding graphics, and rules • Page 3 of 8`,
+          `# 🎨 Ticket Appearance`,
+          `-# Page 3 of 8 • Instance ${botId}`,
           ``,
-          `> ### Embed & Layout`,
-          `> • **Panel Title:** **${cust.panelTitle || 'Support'}**`,
-          `> • **Header Banner:** ${topBanner}`,
-          `> • **Inside Ticket Banner:** ${insideBanner}`,
-          `> • **Global Bottom Accent:** ${bottomBanner}`,
+          `### Panel`,
+          `**Title:** ${cust.panelTitle || 'Support'}`,
+          `**Header Banner:** ${topBanner}`,
+          `**Inside Banner:** ${insideBanner}`,
+          `**Bottom Accent:** ${bottomBanner}`,
           ``,
-          `> ### Rules & Guidelines`,
-          `> • **Rules Button:** ${showRules ? `Visible ${statusBadge(true)}` : `Hidden ${statusBadge(false)}`}`,
-          `> • **Rules Title:** **${cust.rulesTitle || 'Support Rules'}**`,
-          `> • **Rules Body Content:** ${cust.rulesDescription ? '`Configured`' : '`Default Guidelines`'}`,
+          `### Rules & Greeting`,
+          `**Rules Button:** ${showRules ? `${EMOJIS.CHECK} Visible` : `${EMOJIS.CROSS} Hidden`}`,
+          `**Rules Title:** ${cust.rulesTitle || 'Support Rules'}`,
+          `**Rules Content:** ${cust.rulesDescription ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`}`,
+          `**Greeting:** ${openGreeting}`,
           ``,
-          `> ### Welcome Prompt`,
-          `> • **Welcome Message:** *${openGreeting}*`,
-          ``,
-          `-# Select an appearance setting below to edit text, banners, or guidelines.`
+          `-# Use the dropdown below to edit text, banners, or guidelines.`
         ].join('\n')
       });
 
@@ -297,37 +311,35 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // ══════════════════════════════════════════════════════════════════════
     case 4: {
       const srvName = cust.serverName?.trim() || 'Community Server';
-      const sessChannel = cust.sessionChannelId ? `<#${cust.sessionChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const ingameVc = cust.ingameVcId ? `<#${cust.ingameVcId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const queueVc = cust.queueVcId ? `<#${cust.queueVcId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const notifyRole = cust.notificationRoleId ? `<@&${cust.notificationRoleId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const hostRole = cust.hostRoleId ? `<@&${cust.hostRoleId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
+      const sessChannel = cust.sessionChannelId ? `${EMOJIS.CHECK} <#${cust.sessionChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const ingameVc = cust.ingameVcId ? `${EMOJIS.CHECK} <#${cust.ingameVcId}>` : `${EMOJIS.CROSS} Not set`;
+      const queueVc = cust.queueVcId ? `${EMOJIS.CHECK} <#${cust.queueVcId}>` : `${EMOJIS.CROSS} Not set`;
+      const notifyRole = cust.notificationRoleId ? `${EMOJIS.CHECK} <@&${cust.notificationRoleId}>` : `${EMOJIS.CROSS} Not set`;
+      const hostRole = cust.hostRoleId ? `${EMOJIS.CHECK} <@&${cust.hostRoleId}>` : `${EMOJIS.CROSS} Not set`;
 
-      const liveBanner = cust.sessionTopBannerUrl ? `Custom ${statusBadge(true)}` : `None ${statusBadge(false)}`;
-      const shutBanner = cust.sessionShutdownBannerUrl ? `Custom ${statusBadge(true)}` : `None ${statusBadge(false)}`;
-      const voteBanner = cust.sessionVoteTopBannerUrl ? `Custom ${statusBadge(true)}` : `None ${statusBadge(false)}`;
+      const liveBanner = cust.sessionTopBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const shutBanner = cust.sessionShutdownBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const voteBanner = cust.sessionVoteTopBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
 
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Live patrol operations, dispatch channels, and radios • Page 4 of 8`,
+          `# 🚔 Live Sessions`,
+          `-# Page 4 of 8 • Instance ${botId}`,
           ``,
-          `> ### Voice & Communications`,
-          `> • **Announcements Channel:** ${sessChannel}`,
-          `> • **In-Game Radio VC:** ${ingameVc}`,
-          `> • **Queue Staging VC:** ${queueVc}`,
+          `### Channels`,
+          `**Announcements:** ${sessChannel}`,
+          `**In-Game Radio:** ${ingameVc}`,
+          `**Queue Staging:** ${queueVc}`,
           ``,
-          `> ### Staff Authorization`,
-          `> • **Session Host Role:** ${hostRole}`,
-          `> • **Staff Alert Role:** ${notifyRole}`,
+          `### Roles`,
+          `**Session Host:** ${hostRole}`,
+          `**Staff Alerts:** ${notifyRole}`,
           ``,
-          `> ### Session Graphics`,
-          `> • **Live Patrol Banner:** ${liveBanner}`,
-          `> • **Session Vote Banner:** ${voteBanner}`,
-          `> • **Shutdown Banner:** ${shutBanner}`,
+          `### Banners`,
+          `**Live:** ${liveBanner} • **Vote:** ${voteBanner} • **Shutdown:** ${shutBanner}`,
           ``,
-          `-# Select a session setting below to edit channels, roles, or banners.`
+          `-# Use the dropdown below to edit channels, roles, or banners.`
         ].join('\n')
       });
 
@@ -368,8 +380,8 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // ══════════════════════════════════════════════════════════════════════
     case 5: {
       const srvName = cust.serverName?.trim() || 'Community Server';
-      const revChannel = cust.reviewChannelId ? `<#${cust.reviewChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const resChannel = cust.resultsChannelId ? `<#${cust.resultsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
+      const revChannel = cust.reviewChannelId ? `${EMOJIS.CHECK} <#${cust.reviewChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const resChannel = cust.resultsChannelId ? `${EMOJIS.CHECK} <#${cust.resultsChannelId}>` : `${EMOJIS.CROSS} Not set`;
       const isIngameOpen = cust.appIngameOpen !== false;
       const isDiscordOpen = cust.appDiscordOpen !== false;
 
@@ -379,22 +391,22 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Recruitment desk, review channels, and question banks • Page 5 of 8`,
+          `# 📋 Staff Applications`,
+          `-# Page 5 of 8 • Instance ${botId}`,
           ``,
-          `> ### Application Routing`,
-          `> • **Staff Review Feed:** ${revChannel}`,
-          `> • **Public Decision Channel:** ${resChannel}`,
+          `### Channels`,
+          `**Review Feed:** ${revChannel}`,
+          `**Results Channel:** ${resChannel}`,
           ``,
-          `> ### Department Recruitment Status`,
-          `> • **In-Game Moderator:** ${isIngameOpen ? `Open ${statusBadge(true)}` : `Closed ${statusBadge(false)}`}`,
-          `> • **Discord Moderator:** ${isDiscordOpen ? `Open ${statusBadge(true)}` : `Closed ${statusBadge(false)}`}`,
+          `### Departments`,
+          `**In-Game Moderator:** ${isIngameOpen ? `${EMOJIS.CHECK} Open` : `${EMOJIS.CROSS} Closed`}`,
+          `**Discord Moderator:** ${isDiscordOpen ? `${EMOJIS.CHECK} Open` : `${EMOJIS.CROSS} Closed`}`,
           ``,
-          `> ### Interview Question Banks`,
-          `> • **In-Game Mod Bank:** \`${ingameQCount} Questions Configured\``,
-          `> • **Discord Mod Bank:** \`${discordQCount} Questions Configured\``,
+          `### Questions`,
+          `**In-Game Bank:** ${ingameQCount} questions`,
+          `**Discord Bank:** ${discordQCount} questions`,
           ``,
-          `-# Select an application setting below to edit channels or question banks.`
+          `-# Use the dropdown below to edit channels or question banks.`
         ].join('\n')
       });
 
@@ -435,28 +447,28 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // ══════════════════════════════════════════════════════════════════════
     case 6: {
       const srvName = cust.serverName?.trim() || 'Community Server';
-      const staffChan = cust.staffDocsChannelId ? `<#${cust.staffDocsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const layoutMode = cust.staffDocsLayout === 'buttons' ? 'Interactive Buttons' : 'Dropdown Select Menu';
+      const staffChan = cust.staffDocsChannelId ? `${EMOJIS.CHECK} <#${cust.staffDocsChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const layoutMode = cust.staffDocsLayout === 'buttons' ? 'Buttons' : 'Dropdown menu';
 
-      const topBannerStatus = cust.staffDocsTopBannerUrl ? `Custom ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
-      const bottomBannerStatus = cust.staffDocsBottomBannerUrl ? `Custom ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
+      const topBannerStatus = cust.staffDocsTopBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const bottomBannerStatus = cust.staffDocsBottomBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
 
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Handbooks, operational policies, and documentation hub • Page 6 of 8`,
+          `# 📚 Staff Documentation`,
+          `-# Page 6 of 8 • Instance ${botId}`,
           ``,
-          `> ### Hub Architecture`,
-          `> • **Documentation Channel:** ${staffChan}`,
-          `> • **Presentation Mode:** \`${layoutMode}\``,
-          `> • **Hub Embed Title:** **${cust.staffDocsTitle || 'Official Staff Documentation'}**`,
+          `### Hub`,
+          `**Channel:** ${staffChan}`,
+          `**Layout:** ${layoutMode}`,
+          `**Title:** ${cust.staffDocsTitle || 'Official Staff Documentation'}`,
           ``,
-          `> ### Documentation Graphics`,
-          `> • **Top Header Graphic:** ${topBannerStatus}`,
-          `> • **Bottom Footer Graphic:** ${bottomBannerStatus}`,
+          `### Graphics`,
+          `**Top Banner:** ${topBannerStatus}`,
+          `**Bottom Banner:** ${bottomBannerStatus}`,
           ``,
-          `-# Select a documentation setting below to edit content, banners, or channel.`
+          `-# Use the dropdown below to edit content, banners, or the channel.`
         ].join('\n')
       });
 
@@ -497,43 +509,40 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
     // ══════════════════════════════════════════════════════════════════════
     case 7: {
       const srvName = cust.serverName?.trim() || 'Community Server';
-      const staffRole = cust.botStaffRoleId ? `<@&${cust.botStaffRoleId}> ${statusBadge(true)}` : `*Admins Only* ${statusBadge(false)}`;
-      const infrChan = cust.infractionsChannelId ? `<#${cust.infractionsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const promChan = cust.promotionsChannelId ? `<#${cust.promotionsChannelId}> ${statusBadge(true)}` : `*Not Configured* ${statusBadge(false)}`;
-      const infrRole = cust.infractionStaffRoleId ? `<@&${cust.infractionStaffRoleId}> ${statusBadge(true)}` : `*None* ${statusBadge(false)}`;
-      const promRole = cust.promotionStaffRoleId ? `<@&${cust.promotionStaffRoleId}> ${statusBadge(true)}` : `*None* ${statusBadge(false)}`;
+      const staffRole = cust.botStaffRoleId ? `${EMOJIS.CHECK} <@&${cust.botStaffRoleId}>` : `${EMOJIS.CROSS} Admins only`;
+      const infrChan = cust.infractionsChannelId ? `${EMOJIS.CHECK} <#${cust.infractionsChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const promChan = cust.promotionsChannelId ? `${EMOJIS.CHECK} <#${cust.promotionsChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const infrRole = cust.infractionStaffRoleId ? `${EMOJIS.CHECK} <@&${cust.infractionStaffRoleId}>` : `${EMOJIS.CROSS} None`;
+      const promRole = cust.promotionStaffRoleId ? `${EMOJIS.CHECK} <@&${cust.promotionStaffRoleId}>` : `${EMOJIS.CROSS} None`;
 
-      const promBanner = cust.promoteBannerUrl ? `Custom ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
-      const infrBanner = cust.infractBannerUrl ? `Custom ${statusBadge(true)}` : `Default ${statusBadge(false)}`;
+      const promBanner = cust.promoteBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
+      const infrBanner = cust.infractBannerUrl ? `${EMOJIS.CHECK} Custom` : `${EMOJIS.CROSS} Default`;
 
-      const welcomeChan = cust.welcomeChannelId ? `<#${cust.welcomeChannelId}> ${statusBadge(true)}` : `*Disabled / Not Set* ${statusBadge(false)}`;
-      const welcomeStatus = cust.welcomeEnabled && cust.welcomeChannelId ? `Enabled ${statusBadge(true)}` : `Disabled ${statusBadge(false)}`;
+      const welcomeChan = cust.welcomeChannelId ? `${EMOJIS.CHECK} <#${cust.welcomeChannelId}>` : `${EMOJIS.CROSS} Not set`;
+      const welcomeStatus = cust.welcomeEnabled && cust.welcomeChannelId ? `${EMOJIS.CHECK} Enabled` : `${EMOJIS.CROSS} Disabled`;
 
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Internal staff management, roles, and community settings • Page 7 of 8`,
+          `# 🛡️ Staff & Community`,
+          `-# Page 7 of 8 • Instance ${botId}`,
           ``,
-          `> ### Management & Staff Access`,
-          `> • **Authorized Staff Role:** ${staffRole}`,
-          `> • **Management Access:** ${cust.botStaffRoleId ? '`Restricted to Staff Role`' : '`Admins Only`'}`,
+          `### Access`,
+          `**Staff Role:** ${staffRole}`,
           ``,
-          `> ### Welcome System`,
-          `> • **Welcome Channel:** ${welcomeChan}`,
-          `> • **Welcome Card Status:** ${welcomeStatus}`,
+          `### Welcome`,
+          `**Channel:** ${welcomeChan}`,
+          `**Status:** ${welcomeStatus}`,
           ``,
-          `> ### Promotion Announcements`,
-          `> • **Public Promotions Channel:** ${promChan}`,
-          `> • **Authorized Promotion Role:** ${promRole}`,
-          `> • **Promotion Card Graphic:** ${promBanner}`,
+          `### Promotions`,
+          `**Channel:** ${promChan}`,
+          `**Role:** ${promRole} • **Banner:** ${promBanner}`,
           ``,
-          `> ### Staff Infraction Logs`,
-          `> • **Infractions Audit Channel:** ${infrChan}`,
-          `> • **Authorized Disciplinary Role:** ${infrRole}`,
-          `> • **Infraction Card Graphic:** ${infrBanner}`,
+          `### Infractions`,
+          `**Channel:** ${infrChan}`,
+          `**Role:** ${infrRole} • **Banner:** ${infrBanner}`,
           ``,
-          `-# Select a setting below to edit staff roles, welcome system, promotions, or infractions.`
+          `-# Use the buttons or dropdown below to edit these settings.`
         ].join('\n')
       });
 
@@ -604,20 +613,20 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
       containerComponents.push({
         type: 10,
         content: [
-          `# Server Configuration`,
-          `-# Natural language configuration and smart assistance • Page 8 of 8`,
+          `# 🤖 AI Assistant`,
+          `-# Page 8 of 8 • Instance ${botId}`,
           ``,
-          `> ### Intelligence Engine Status`,
-          `> • **Active AI Provider:** \`${activeAiProv}\``,
-          `> • **API Key Status:** ${statusBadge(hasAiKey)} ${hasAiKey ? '`Configured & Shielded`' : '`Not Configured`'}`,
-          `> • **Target Model:** \`${activeModel}\``,
+          `### Status`,
+          `**Provider:** ${activeAiProv}`,
+          `**API Key:** ${statusText(hasAiKey, 'Connected', 'Not set')}`,
+          `**Model:** ${activeModel}`,
           ``,
-          `> ### Conversational Features`,
-          `> • Rebrand Ticket Panels, Welcome Messages, & Guideline Text`,
-          `> • Auto-configure Voice Radios, Queue Channels, & Staff Roles`,
-          `> • Update or clear graphic banners across all bot modules`,
+          `### What it can do`,
+          `• Rewrite ticket panels, welcome messages, and rules`,
+          `• Set up radios, queue channels, and staff roles`,
+          `• Update or clear banners across every module`,
           ``,
-          `-# Select an AI setting below to configure your API key or prompt the assistant.`
+          `-# Use the dropdown below to connect a key or ask the assistant.`
         ].join('\n')
       });
 
@@ -648,6 +657,24 @@ export function buildConfigPanelPayload(botId, page = 1, includeAttachment = tru
       break;
     }
   }
+
+  // Quick "Jump to page" dropdown (wired to the existing cfg_select_page_ handler)
+  containerComponents.push({
+    type: 1,
+    components: [
+      {
+        type: 3,
+        custom_id: `cfg_select_page_${botId}`,
+        placeholder: 'Jump to page…',
+        options: PAGE_OPTIONS.map(opt => ({
+          label: opt.label,
+          description: opt.description,
+          value: String(opt.page),
+          default: opt.page === activePage
+        }))
+      }
+    ]
+  });
 
   // Master Navigation Controls (Left arrow, Right arrow, Refresh, and Helper on the far side)
   containerComponents.push({

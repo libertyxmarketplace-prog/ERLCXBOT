@@ -184,7 +184,7 @@ export function buildStaffDocSectionPayload(sectionId) {
 
   if (sectionId === 'staff_regulations' || sectionId === 'general_regulations') {
     contentText =
-      `## ERLCX | Staff Regulations & Code of Conduct\n` +
+      `## LIBERTX | Staff Regulations & Code of Conduct\n` +
       `> Section I: Core Directives & Professional Expectations\n\n` +
       `### S1. Standard of Professionalism\n` +
       `> Staff members must maintain a calm, objective, and mature demeanor in all interactions. Arguing with community members, engaging in public toxicity, or reacting defensively during administrative disputes will not be tolerated under any circumstances.\n\n` +
@@ -196,10 +196,10 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> In-game commands (including teleportation, vehicle spawning, health overrides, and respawning) may only be utilized strictly for active administrative duty. Utilizing staff privileges to gain in-character advantages during pursuits, shootouts, or criminal scenarios results in immediate termination and server blacklisting.\n\n` +
       `### S5. Confidentiality & Security\n` +
       `> Discussions within staff channels, management directives, internal reviews, and ticket transcripts are strictly confidential. Sharing screenshots or disclosing internal records to regular community members is considered severe misconduct.\n\n` +
-      `-# ERLCX Staff Administration • Official Regulatory Standard`;
+      `-# LIBERTX Staff Administration • Official Regulatory Standard`;
   } else if (sectionId === 'moderation_sop') {
     contentText =
-      `## ERLCX | In-Game & Moderation SOP\n` +
+      `## LIBERTX | In-Game & Moderation SOP\n` +
       `> Section II: Operational Callout & Dispute Resolution Protocol\n\n` +
       `### M1. Mod Call Response Procedure\n` +
       `> 1. Enter moderation mode before responding to any active callout.\n` +
@@ -211,10 +211,10 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> Staff members must claim support tickets promptly. Read the inquiry completely before responding, communicate with formal grammar, and ensure all user questions are answered prior to initiating ticket closure. Do not leave tickets unclaimed for more than five (5) minutes.\n\n` +
       `### M4. In-Game Roleplay Prioritization\n` +
       `> When on the staff team, server moderation takes absolute priority over personal roleplay. If mod calls are pending or server rules are being violated, staff must immediately handle moderation obligations before returning to character play.\n\n` +
-      `-# ERLCX Staff Administration • Standard Operating Procedure`;
+      `-# LIBERTX Staff Administration • Standard Operating Procedure`;
   } else if (sectionId === 'strike_matrix') {
     contentText =
-      `## ERLCX | Progressive Disciplinary Matrix\n` +
+      `## LIBERTX | Progressive Disciplinary Matrix\n` +
       `> Section III: Staff Accountability & Strike Structure\n\n` +
       `### Overview of Progressive Discipline\n` +
       `> Staff members are subject to consistent disciplinary standards. Violations of staff regulations or neglect of duty will result in recorded disciplinary actions posted publicly to #infractions.\n\n` +
@@ -226,13 +226,13 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> • **Level 3 (Second Strike):**\n` +
       `> Issued for serious policy violations, failure to follow management directives, or severe inactivity without LOA. Results in temporary suspension of moderation permissions and final notice.\n\n` +
       `> • **Level 4 (Third Strike / Demotion / Removal):**\n` +
-      `> Reaching three active strikes results in immediate demotion or permanent removal from the ERLCX staff team.\n\n` +
+      `> Reaching three active strikes results in immediate demotion or permanent removal from the LIBERTX staff team.\n\n` +
       `### Strike Expiration Timeline\n` +
       `> Strikes remain active on a staff member's record for forty-five (45) consecutive days from the date of issuance. Following 45 days of clean and active service, the strike is removed from the active count.\n\n` +
-      `-# ERLCX Staff Administration • Disciplinary Matrix`;
+      `-# LIBERTX Staff Administration • Disciplinary Matrix`;
   } else if (sectionId === 'staff_commands') {
     contentText =
-      `## ERLCX | Administrative Command Directory\n` +
+      `## LIBERTX | Administrative Command Directory\n` +
       `> Section IV: In-Game ER:LC & Discord Syntax Guide\n\n` +
       `### In-Game ER:LC Commands\n` +
       `> • \`:to [player]\` - Teleports staff member directly to target player.\n` +
@@ -247,7 +247,7 @@ export function buildStaffDocSectionPayload(sectionId) {
       `> • \`:pm [player] [message]\` - Sends private administrative directive to player.\n\n` +
       `### Usage Guidelines\n` +
       `> Broadcast commands (\`:m\`) must only be utilized for critical server operations such as session starts, priority cooldowns, and server shutdowns.\n\n` +
-      `-# ERLCX Staff Administration • Command Directory`;
+      `-# LIBERTX Staff Administration • Command Directory`;
   }
 
   const v2Payload = {

@@ -194,7 +194,7 @@ export async function endGiveaway(client, giveawayId) {
             const user = await client.users.fetch(winnerId).catch(() => null);
             if (user) {
               await user.send({
-                content: `🎉 Congratulations <@${winnerId}>! You have won the giveaway for **${giveaway.prize}** in **ERLCX**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
+                content: `🎉 Congratulations <@${winnerId}>! You have won the giveaway for **${giveaway.prize}** in **LIBERTX**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
               }).catch(() => null);
             }
           } catch (dmErr) {
@@ -248,7 +248,7 @@ export async function rerollGiveaway(client, giveawayId, count = 1) {
           const user = await client.users.fetch(winnerId).catch(() => null);
           if (user) {
             await user.send({
-              content: `🎉 Congratulations <@${winnerId}>! You were selected as the new winner for **${giveaway.prize}** in **ERLCX**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
+              content: `🎉 Congratulations <@${winnerId}>! You were selected as the new winner for **${giveaway.prize}** in **LIBERTX**! ${GIVEAWAY_EMOJI}\n> • **Prize:** **${giveaway.prize}**\n> • **Host:** <@${giveaway.hostId}>\n> Please open a ticket or reach out to <@${giveaway.hostId}> to claim your prize!`
             }).catch(() => null);
           }
         } catch (dmErr) {

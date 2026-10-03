@@ -125,7 +125,8 @@ export const DEFAULT_CUSTOMIZATIONS = {
   // ─── AI ────────────────────────────────────────────────────────────────────
   aiProvider: "openrouter",
   aiModel: "openai/gpt-4o-mini",
-  aiApiKey: ""
+  aiApiKey: "",
+  aiSystemInstructions: ""
 };
 
 
